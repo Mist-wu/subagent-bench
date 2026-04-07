@@ -8,3 +8,4 @@ build/
 *.egg-info/
 results/
 benchmark.log
+EVALUATION.md
