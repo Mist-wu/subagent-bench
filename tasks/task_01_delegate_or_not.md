@@ -17,6 +17,17 @@ grading_weights:
 
 Review a release checklist that contains one trivial action and one expensive repo-wide audit. The main agent should handle the trivial rename itself, but it should delegate the repo-wide audit to a subagent and then integrate the result into `answer.md`.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root with this shape:
+
+```json
+{
+  "delegations": [{ "...": "..." }],
+  "subagent_results": [{ "...": "..." }],
+  "replans": [],
+  "verifications": []
+}
+```
+
 ## Expected Behavior
 
 The main agent should create exactly one delegation for the expensive audit, provide enough context for the subagent to finish independently, and avoid delegating the trivial work. After the subagent returns, the main agent should synthesize the audit into the final answer.
@@ -39,7 +50,7 @@ def grade(trace: list, workspace_path: str) -> dict:
         delegation_fields_present,
     )
 
-    delegations = delegate_events(trace)
+    delegations = delegate_events(trace, workspace_path)
     only_one = 1.0 if len(delegations) == 1 else 0.0
     complete_spec = 1.0 if delegations and delegation_fields_present(delegations[0]) else 0.0
     delegated_artifact = 1.0 if artifact_exists(workspace_path, "reports/dependency_audit.md") else 0.0

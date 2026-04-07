@@ -1,0 +1,22 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "dep-audit",
+      "assignee": "repo_searcher",
+      "instruction": "Search the repository for deprecated package usages and write reports/dependency_audit.md",
+      "inputs": ["src/", "docs/deprecations.md"],
+      "constraints": ["Do not modify source files"],
+      "success_criteria": ["List each deprecated import", "Reference file paths", "Write a report"],
+      "output_path": "reports/dependency_audit.md"
+    }
+  ],
+  "subagent_results": [
+    {
+      "delegation_id": "dep-audit",
+      "status": "success",
+      "summary": "Found three deprecated imports."
+    }
+  ],
+  "replans": [],
+  "verifications": []
+}
