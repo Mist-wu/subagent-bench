@@ -1,0 +1,30 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "risk-review-a",
+      "assignee": "frontend_reviewer",
+      "instruction": "Review rollout risk and summarize whether it is safe.",
+      "inputs": ["reports/frontend-risk.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["State safe or unsafe"],
+      "output_path": "reports/review_a.md"
+    },
+    {
+      "delegation_id": "risk-review-b",
+      "assignee": "backend_reviewer",
+      "instruction": "Review rollout risk and summarize whether it is safe.",
+      "inputs": ["reports/backend-risk.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["State safe or unsafe"],
+      "output_path": "reports/review_b.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "risk-review-a", "status": "success", "summary": "Safe to roll out."},
+    {"delegation_id": "risk-review-b", "status": "success", "summary": "Unsafe to roll out until policy exception is approved."}
+  ],
+  "replans": [],
+  "verifications": [
+    {"source": "docs/rollout-policy.md", "reason": "Subagent conclusions conflict."}
+  ]
+}

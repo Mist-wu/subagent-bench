@@ -17,6 +17,8 @@ grading_weights:
 
 Two subagents return conflicting conclusions about whether a rollout is safe. The main agent should not blindly merge them. It should verify the conflict by consulting a source-of-truth document, then produce `reports/final_decision.md`.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should detect the contradiction, run a verification step, and base the final decision on the verified source instead of raw delegation outputs.
@@ -33,19 +35,16 @@ The main agent should detect the contradiction, run a verification step, and bas
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import subagent_results
+    from subagent_bench.orchestration_checks import subagent_results, verification_events
 
-    results = subagent_results(trace)
+    results = subagent_results(trace, workspace_path)
     contradictory = 0.0
     if len(results) >= 2:
         summaries = [event.get("summary", "").lower() for event in results[:2]]
         contradictory = 1.0 if "safe" in summaries[0] and "unsafe" in summaries[1] else 0.0
 
-    verification = 1.0 if any(event.get("type") == "verification" for event in trace) else 0.0
-
-    verification_index = next((i for i, event in enumerate(trace) if event.get("type") == "verification"), -1)
-    final_index = next((i for i, event in enumerate(trace) if event.get("type") == "artifact_written" and event.get("path") == "reports/final_decision.md"), -1)
-    ordered = 1.0 if verification_index != -1 and final_index != -1 and verification_index < final_index else 0.0
+    verification = 1.0 if verification_events(trace, workspace_path) else 0.0
+    ordered = verification
 
     artifact = Path(workspace_path) / "reports/final_decision.md"
     cited_source = 0.0
