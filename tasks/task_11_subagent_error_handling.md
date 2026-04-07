@@ -30,9 +30,10 @@ The subagent should detect the failure, switch to the fallback input, and comple
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
+    from subagent_bench.orchestration_checks import transcript_has_tool_call, transcript_has_tool_result_error
 
-    saw_failure = 1.0 if any(event.get("type") == "tool_result" and event.get("status") == "error" for event in trace) else 0.0
-    fallback = 1.0 if any(event.get("type") == "tool_use" and event.get("tool") == "read_fallback" for event in trace) else 0.0
+    saw_failure = 1.0 if transcript_has_tool_result_error(trace, "read_primary") else 0.0
+    fallback = 1.0 if transcript_has_tool_call(trace, "read_fallback") else 0.0
 
     artifact = Path(workspace_path) / "reports/recovered_summary.md"
     completion = 1.0 if artifact.exists() else 0.0
