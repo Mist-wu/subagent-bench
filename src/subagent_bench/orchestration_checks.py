@@ -54,7 +54,12 @@ def replan_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = 
 def verification_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
-        return list(trace_bundle.get("verifications", []))
+        verifications = list(trace_bundle.get("verifications", []))
+        if verifications:
+            return verifications
+        verification_step = trace_bundle.get("verification_step")
+        if isinstance(verification_step, dict):
+            return [verification_step]
     return [event for event in trace if event.get("type") == "verification"]
 
 
@@ -65,9 +70,15 @@ def load_delegation_trace(workspace_path: str | None) -> Dict[str, Any]:
     if not trace_path.exists():
         return {}
     try:
-        return jsonlib.loads(trace_path.read_text(encoding="utf-8"))
+        payload = jsonlib.loads(trace_path.read_text(encoding="utf-8"))
     except jsonlib.JSONDecodeError:
         return {}
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, list):
+        if all(isinstance(item, dict) for item in payload):
+            return {"delegations": payload}
+    return {}
 
 
 def delegation_fields_present(event: Dict[str, Any]) -> bool:

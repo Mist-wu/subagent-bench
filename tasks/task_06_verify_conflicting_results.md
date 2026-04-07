@@ -59,7 +59,10 @@ def grade(trace: list, workspace_path: str) -> dict:
     results = subagent_results(trace, workspace_path)
     contradictory = 0.0
     if len(results) >= 2:
-        summaries = [event.get("summary", "").lower() for event in results[:2]]
+        summaries = [
+            (event.get("summary") or event.get("conclusion") or "").lower()
+            for event in results[:2]
+        ]
         contradictory = 1.0 if "safe" in summaries[0] and "unsafe" in summaries[1] else 0.0
 
     verification = 1.0 if verification_events(trace, workspace_path) else 0.0
