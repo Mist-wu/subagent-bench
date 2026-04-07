@@ -7,6 +7,7 @@ task_type: execution_search
 dimensions: ["intent_understanding", "tool_use_correctness", "completion_rate", "result_fidelity"]
 grading_type: hybrid
 timeout_seconds: 180
+live_execution_mode: native_subagent
 workspace_files:
   - path: "src/api/users.ts"
     content: |

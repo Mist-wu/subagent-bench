@@ -7,6 +7,7 @@ task_type: execution_recovery
 dimensions: ["timeout_error_handling", "completion_rate", "result_fidelity"]
 grading_type: automated
 timeout_seconds: 180
+live_execution_mode: native_subagent
 workspace_files:
   - path: "inputs/fallback_source.txt"
     content: |

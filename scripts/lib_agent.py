@@ -11,6 +11,7 @@ import platform
 import stat
 import subprocess
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error, request
@@ -809,6 +810,172 @@ def _extract_usage_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str
     return totals
 
 
+def _extract_usage_from_transcripts(transcripts: List[List[Dict[str, Any]]]) -> Dict[str, Any]:
+    totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+        "request_count": 0,
+        "session_count": 0,
+    }
+
+    for transcript in transcripts:
+        if not transcript:
+            continue
+        usage = _extract_usage_from_transcript(transcript)
+        totals["input_tokens"] += usage.get("input_tokens", 0)
+        totals["output_tokens"] += usage.get("output_tokens", 0)
+        totals["cache_read_tokens"] += usage.get("cache_read_tokens", 0)
+        totals["cache_write_tokens"] += usage.get("cache_write_tokens", 0)
+        totals["total_tokens"] += usage.get("total_tokens", 0)
+        totals["cost_usd"] += usage.get("cost_usd", 0.0)
+        totals["request_count"] += usage.get("request_count", 0)
+        totals["session_count"] += 1
+
+    return totals
+
+
+def _parse_entry_timestamp(entry: Dict[str, Any]) -> float | None:
+    raw = entry.get("timestamp")
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+
+    message = entry.get("message", {})
+    if isinstance(message, dict):
+        msg_ts = message.get("timestamp")
+        if isinstance(msg_ts, (int, float)):
+            return float(msg_ts)
+    return None
+
+
+def _load_transcript_file(path: Path) -> List[Dict[str, Any]]:
+    transcript: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            transcript.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to parse transcript line from %s: %s", path.name, exc)
+            transcript.append({"raw": line, "parse_error": str(exc)})
+    return transcript
+
+
+def _load_related_transcripts(
+    agent_id: str,
+    started_at: float,
+    primary_transcript_path: Optional[Path],
+) -> List[Dict[str, Any]]:
+    agent_dir = _get_agent_store_dir(agent_id)
+    sessions_dir = agent_dir / "sessions"
+    if not sessions_dir.exists():
+        return []
+
+    tolerance_seconds = 5.0
+    candidates = sorted(
+        list(sessions_dir.rglob("*.jsonl")) + list(sessions_dir.rglob("*.ndjson")),
+        key=lambda path: path.stat().st_mtime,
+    )
+
+    related: List[Dict[str, Any]] = []
+    for path in candidates:
+        if primary_transcript_path is not None and path == primary_transcript_path:
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < (started_at - tolerance_seconds):
+            continue
+        entries = _load_transcript_file(path)
+        if not entries:
+            continue
+        related.append({"path": path, "entries": entries, "mtime": mtime})
+
+    return related
+
+
+def _build_execution_trace(
+    primary_transcript: List[Dict[str, Any]],
+    primary_transcript_path: Optional[Path],
+    related_transcripts: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    annotated: List[tuple[float, int, Dict[str, Any]]] = []
+
+    def add_entries(entries: List[Dict[str, Any]], *, session_source: str, path: Optional[Path], order: int) -> None:
+        for index, entry in enumerate(entries):
+            annotated_entry = dict(entry)
+            annotated_entry["session_source"] = session_source
+            if path is not None:
+                annotated_entry["session_path"] = str(path)
+            ts = _parse_entry_timestamp(entry)
+            fallback = float(order * 1_000_000 + index)
+            annotated.append((ts if ts is not None else fallback, order * 1_000_000 + index, annotated_entry))
+
+    add_entries(primary_transcript, session_source="main", path=primary_transcript_path, order=0)
+    for order, record in enumerate(related_transcripts, start=1):
+        add_entries(
+            record.get("entries", []),
+            session_source="child",
+            path=record.get("path"),
+            order=order,
+        )
+
+    annotated.sort(key=lambda item: (item[0], item[1]))
+    return [entry for _, _, entry in annotated]
+
+
+def _archive_related_transcripts(
+    related_transcripts: List[Dict[str, Any]],
+    output_dir: Path,
+    task_id: str,
+) -> None:
+    import shutil as _shutil
+
+    for index, record in enumerate(related_transcripts, start=1):
+        transcript_path = record.get("path")
+        if not isinstance(transcript_path, Path):
+            continue
+        archive_dest = output_dir / f"{task_id}.child-{index}.jsonl"
+        try:
+            _shutil.copy2(transcript_path, archive_dest)
+            logger.info("Archived child transcript to %s", archive_dest)
+        except OSError as exc:
+            logger.warning("Failed to archive child transcript: %s", exc)
+
+
+def _resolve_live_task_prompt(task: Task) -> str:
+    benchmark_target = str(task.frontmatter.get("benchmark_target", "")).strip()
+    live_mode = str(task.frontmatter.get("live_execution_mode", "")).strip()
+    if not live_mode:
+        live_mode = "native_subagent" if benchmark_target == "C6b" else "direct"
+    if live_mode != "native_subagent":
+        return task.prompt
+
+    return (
+        "You are the main agent for this benchmark task.\n\n"
+        "Use a real OpenClaw subagent to perform the leaf work.\n"
+        "Requirements:\n"
+        '- Delegate the worker task with `sessions_spawn` using `runtime: "subagent"`.\n'
+        "- The spawned subagent must do the actual leaf execution; do not do that work yourself if spawn succeeds.\n"
+        "- Pass the full delegated worker task below to the subagent.\n"
+        "- Wait for push-based completion instead of polling child session history.\n"
+        "- Only finish after the requested artifact exists in the workspace.\n\n"
+        "Delegated worker task:\n"
+        "--- BEGIN SUBAGENT TASK ---\n"
+        f"{task.prompt.strip()}\n"
+        "--- END SUBAGENT TASK ---"
+    )
+
+
 def _is_session_lock_error(stderr: str) -> bool:
     return "session file locked" in (stderr or "").lower()
 
@@ -828,9 +995,11 @@ def execute_openclaw_task(
     logger.info("🤖 Agent [%s] starting task: %s", agent_id, task.task_id)
     logger.info("   Task: %s", task.name)
     logger.info("   Category: %s", task.category)
+    live_prompt = _resolve_live_task_prompt(task)
     if verbose:
         logger.info(
-            "   Prompt: %s", task.prompt[:500] + "..." if len(task.prompt) > 500 else task.prompt
+            "   Prompt: %s",
+            live_prompt[:500] + "..." if len(live_prompt) > 500 else live_prompt,
         )
 
     # Clean up previous session transcripts so we can reliably find this task's
@@ -919,7 +1088,7 @@ def execute_openclaw_task(
                         "--session-id",
                         attempt_session_id,
                         "--message",
-                        task.prompt,
+                        live_prompt,
                     ],
                     capture_output=True,
                     text=True,
@@ -959,7 +1128,11 @@ def execute_openclaw_task(
             transcript_path,
             max_wait_seconds=max(60.0, min(240.0, timeout_seconds)),
         )
-    usage = _extract_usage_from_transcript(transcript)
+    related_transcripts = _load_related_transcripts(agent_id, start_time, transcript_path)
+    trace = _build_execution_trace(transcript, transcript_path, related_transcripts)
+    usage = _extract_usage_from_transcripts(
+        [transcript, *[record.get("entries", []) for record in related_transcripts]]
+    )
     execution_time = time.time() - start_time
 
     # Archive the raw transcript JSONL before cleanup_agent_sessions deletes it
@@ -972,6 +1145,7 @@ def execute_openclaw_task(
             logger.info("Archived transcript to %s", archive_dest)
         except OSError as exc:
             logger.warning("Failed to archive transcript: %s", exc)
+        _archive_related_transcripts(related_transcripts, output_dir, task.task_id)
 
     status = "success"
     if timed_out:
@@ -1028,6 +1202,7 @@ def execute_openclaw_task(
         "task_id": task.task_id,
         "status": status,
         "transcript": transcript,
+        "trace": trace,
         "usage": usage,
         "workspace": str(workspace),
         "exit_code": exit_code,

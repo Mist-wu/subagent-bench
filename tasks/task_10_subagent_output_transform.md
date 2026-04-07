@@ -7,6 +7,7 @@ task_type: execution_transform
 dimensions: ["intent_understanding", "output_format_compliance", "completion_rate", "result_fidelity"]
 grading_type: hybrid
 timeout_seconds: 180
+live_execution_mode: native_subagent
 workspace_files:
   - path: "data/employees.csv"
     content: |
