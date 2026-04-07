@@ -1,0 +1,28 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "schema-scan",
+      "assignee": "schema_auditor",
+      "instruction": "Scan the schema migration impact and write reports/schema_scan.md",
+      "inputs": ["db/schema.sql", "migrations/"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List schema changes", "Write output report"],
+      "output_path": "reports/schema_scan.md"
+    },
+    {
+      "delegation_id": "remediation-plan",
+      "assignee": "migration_planner",
+      "instruction": "Use reports/schema_scan.md to plan remediation and write reports/remediation_plan.md",
+      "inputs": ["reports/schema_scan.md", "src/backend", "docs/api-contract.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["Plan remediation", "Reference schema output"],
+      "output_path": "reports/remediation_plan.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "schema-scan", "status": "success"},
+    {"delegation_id": "remediation-plan", "status": "success"}
+  ],
+  "replans": [],
+  "verifications": []
+}

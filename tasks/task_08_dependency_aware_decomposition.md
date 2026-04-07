@@ -17,6 +17,8 @@ grading_weights:
 
 Plan a migration where schema analysis must happen before code remediation. The main agent should not run the remediation subtask before the dependency input is ready. It should produce `reports/dependency_plan.md`.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should model the dependency correctly, delegate the schema scan first, and only then launch the remediation planning step. Incorrect parallelization should fail this task.
@@ -33,8 +35,9 @@ The main agent should model the dependency correctly, delegate the schema scan f
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
+    from subagent_bench.orchestration_checks import delegate_events
 
-    delegate_indices = [(index, event) for index, event in enumerate(trace) if event.get("type") == "delegate"]
+    delegate_indices = list(enumerate(delegate_events(trace, workspace_path)))
     ordered = 0.0
     dependency_link = 0.0
 
