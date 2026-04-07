@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_JUDGE_MODEL = "openai-codex/gpt-5.4"
 DEFAULT_JUDGE_AGENT_PREFIX = "bench-judge"
 DEFAULT_JUDGE_TIMEOUT_SECONDS = 180
+JUDGE_TRANSCRIPT_PREVIEW_CHARS = 6000
+JUDGE_WORKSPACE_PREVIEW_CHARS = 3000
 
 
 @dataclass
@@ -120,7 +122,7 @@ def _grade_automated(task: Task, execution_result: Dict[str, Any], verbose: bool
         )
 
     scores = grade_func(
-        execution_result.get("transcript", []),
+        execution_result.get("trace", execution_result.get("transcript", [])),
         execution_result.get("workspace", ""),
     )
     if not isinstance(scores, dict):
@@ -178,14 +180,35 @@ def _grade_llm_judge(
     rubric = task.llm_judge_rubric or _format_grading_criteria(task)
     prompt = _build_judge_prompt(task, transcript_summary, rubric, workspace_content)
 
-    if judge_backend == "api":
-        # Direct API call — bypasses OpenClaw personality injection
-        judge_result = call_judge_api(
-            prompt=prompt,
-            model=judge_model,
+    def _run_judge(run_prompt: str) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        if judge_backend == "api":
+            judge_result = call_judge_api(
+                prompt=run_prompt,
+                model=judge_model,
+                timeout_seconds=judge_timeout_seconds,
+            )
+            raw = _parse_judge_text(judge_result.get("text", ""))
+            return judge_result, raw
+
+        agent_id = _ensure_judge_agent(judge_agent_prefix, judge_model, skill_dir)
+        judge_workspace = Path(f"/tmp/pinchbench/judge/{task.task_id}")
+        judge_result = run_openclaw_prompt(
+            agent_id=agent_id,
+            prompt=run_prompt,
+            workspace=judge_workspace,
             timeout_seconds=judge_timeout_seconds,
         )
+        raw = _parse_judge_response(judge_result.get("transcript", []))
+        return judge_result, raw
 
+    judge_result, raw_parsed = _run_judge(prompt)
+    if _judge_result_has_policy_block(judge_result):
+        logger.warning("Judge prompt was policy-blocked for %s, retrying with compact prompt", task.task_id)
+        compact_prompt = _build_compact_judge_prompt(task, transcript_summary, rubric, workspace_content)
+        judge_result, raw_parsed = _run_judge(compact_prompt)
+
+    if judge_backend == "api":
+        # Direct API call — bypasses OpenClaw personality injection
         if verbose:
             logger.info("   [VERBOSE] Judge execution status: %s", judge_result.get("status"))
             if judge_result.get("error"):
@@ -193,19 +216,7 @@ def _grade_llm_judge(
 
         if judge_result.get("status") != "success":
             logger.warning("Judge API call failed: %s", judge_result.get("error", judge_result.get("status")))
-
-        raw_parsed = _parse_judge_text(judge_result.get("text", ""))
     else:
-        # Default: OpenClaw agent session
-        agent_id = _ensure_judge_agent(judge_agent_prefix, judge_model, skill_dir)
-        judge_workspace = Path(f"/tmp/pinchbench/judge/{task.task_id}")
-        judge_result = run_openclaw_prompt(
-            agent_id=agent_id,
-            prompt=prompt,
-            workspace=judge_workspace,
-            timeout_seconds=judge_timeout_seconds,
-        )
-
         if verbose:
             logger.info("   [VERBOSE] Judge execution status: %s", judge_result.get("status"))
             logger.info("   [VERBOSE] Judge exit code: %s", judge_result.get("exit_code"))
@@ -213,8 +224,6 @@ def _grade_llm_judge(
 
         if judge_result.get("status") != "success":
             logger.warning("Judge execution failed: %s", judge_result.get("status"))
-
-        raw_parsed = _parse_judge_response(judge_result.get("transcript", []))
 
     if verbose:
         logger.info("   [VERBOSE] Judge raw response parsed: %s", raw_parsed)
@@ -366,15 +375,12 @@ def _build_judge_prompt(task: Task, transcript_summary: str, rubric: str, worksp
     if workspace_content.strip():
         workspace_section = (
             "## Workspace Files Created by Agent\n"
-            f"{workspace_content}\n\n"
+            f"{workspace_content[:JUDGE_WORKSPACE_PREVIEW_CHARS]}\n\n"
         )
     return (
-        "You are a grading function. Your ONLY job is to output a single JSON object.\n\n"
-        "CRITICAL RULES:\n"
-        "- Do NOT use any tools (no Read, Write, exec, or any other tool calls)\n"
-        "- Do NOT create files or run commands\n"
-        "- Do NOT write any prose, explanation, or commentary outside the JSON\n"
-        "- Respond with ONLY a JSON object — nothing else\n\n"
+        "You are scoring a software benchmark run.\n"
+        "Return exactly one JSON object and nothing else.\n"
+        "Do not call tools, browse, or write files.\n\n"
         "Be a strict evaluator. Reserve 1.0 for genuinely excellent performance. "
         "An average acceptable completion should score around 0.6-0.7. "
         "Deduct points for unnecessary steps, verbose output, and inefficient tool usage.\n\n"
@@ -383,13 +389,32 @@ def _build_judge_prompt(task: Task, transcript_summary: str, rubric: str, worksp
         "## Expected Behavior\n"
         f"{task.expected_behavior}\n\n"
         "## Agent Transcript (summarized)\n"
-        f"{transcript_summary}\n\n"
+        f"{transcript_summary[:JUDGE_TRANSCRIPT_PREVIEW_CHARS]}\n\n"
         f"{workspace_section}"
         "## Grading Rubric\n"
         f"{rubric}\n\n"
         "Score each criterion from 0.0 to 1.0.\n"
         'The "total" field must also be between 0.0 and 1.0, and it must be the arithmetic mean of the criterion scores, not their sum.\n\n'
         "Respond with ONLY this JSON structure (no markdown, no code fences, no extra text):\n"
+        '{"scores": {"criterion_name": 0.0}, "total": 0.0, "notes": "brief justification"}'
+    )
+
+
+def _build_compact_judge_prompt(task: Task, transcript_summary: str, rubric: str, workspace_content: str = "") -> str:
+    workspace_excerpt = workspace_content[:1200].strip()
+    transcript_excerpt = transcript_summary[:2500].strip()
+    grading_excerpt = _format_grading_criteria(task)
+    workspace_section = f"Workspace excerpt:\n{workspace_excerpt}\n\n" if workspace_excerpt else ""
+    return (
+        "Score this benchmark run and return one JSON object only.\n"
+        "No tools. No prose outside JSON.\n\n"
+        f"Task name: {task.name}\n"
+        f"Category: {task.category}\n"
+        f"Expected behavior:\n{task.expected_behavior}\n\n"
+        f"Key checks:\n{grading_excerpt}\n\n"
+        f"Transcript excerpt:\n{transcript_excerpt}\n\n"
+        f"{workspace_section}"
+        f"Rubric:\n{rubric}\n\n"
         '{"scores": {"criterion_name": 0.0}, "total": 0.0, "notes": "brief justification"}'
     )
 
@@ -428,43 +453,9 @@ def _parse_judge_response(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # Find all potential JSON objects by looking for balanced braces
-    # We'll extract chunks that start with { and try to parse them
-    json_candidates: List[str] = []
-    brace_depth = 0
-    current_json = []
-    for char in raw_text:
-        if char == "{":
-            if brace_depth == 0:
-                current_json = []
-            brace_depth += 1
-
-        if brace_depth > 0:
-            current_json.append(char)
-
-        if char == "}":
-            brace_depth -= 1
-            if brace_depth == 0 and current_json:
-                json_candidates.append("".join(current_json))
-
-    # Try parsing from the last JSON object backwards (most recent response)
-    for candidate in reversed(json_candidates):
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict) and "scores" in parsed:
-                # Prefer JSON that has the expected structure
-                return parsed
-        except json.JSONDecodeError:
-            continue
-
-    # Try any valid JSON dict
-    for candidate in reversed(json_candidates):
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            continue
+    parsed = _extract_json_dict_from_text(raw_text)
+    if parsed:
+        return parsed
 
     # Fallback: try to extract numeric scores from prose responses.
     # Models sometimes return "Total: 0.72" or "Overall score: 0.65" instead of JSON.
@@ -512,36 +503,9 @@ def _parse_judge_text(raw_text: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # Find balanced-brace JSON objects
-    json_candidates: List[str] = []
-    brace_depth = 0
-    current_json: List[str] = []
-    for char in raw_text:
-        if char == "{":
-            if brace_depth == 0:
-                current_json = []
-            brace_depth += 1
-        if brace_depth > 0:
-            current_json.append(char)
-        if char == "}":
-            brace_depth -= 1
-            if brace_depth == 0 and current_json:
-                json_candidates.append("".join(current_json))
-
-    for candidate in reversed(json_candidates):
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict) and "scores" in parsed:
-                return parsed
-        except json.JSONDecodeError:
-            continue
-    for candidate in reversed(json_candidates):
-        try:
-            parsed = json.loads(candidate)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            continue
+    parsed = _extract_json_dict_from_text(raw_text)
+    if parsed:
+        return parsed
 
     # Fallback: regex for total score
     score_pattern = re.search(
@@ -560,6 +524,39 @@ def _parse_judge_text(raw_text: str) -> Dict[str, Any]:
 
     logger.warning("Failed to parse judge text response")
     return {}
+
+
+def _extract_json_dict_from_text(raw_text: str) -> Dict[str, Any]:
+    decoder = json.JSONDecoder()
+    parsed_dicts: List[Dict[str, Any]] = []
+    for index, char in enumerate(raw_text):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(raw_text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            parsed_dicts.append(parsed)
+    for parsed in reversed(parsed_dicts):
+        if "scores" in parsed or "criteria_scores" in parsed:
+            return parsed
+    return parsed_dicts[-1] if parsed_dicts else {}
+
+
+def _judge_result_has_policy_block(judge_result: Dict[str, Any]) -> bool:
+    haystacks = [
+        str(judge_result.get("error", "")),
+        str(judge_result.get("stderr", "")),
+        str(judge_result.get("stdout", "")),
+        str(judge_result.get("text", "")),
+    ]
+    joined = "\n".join(haystacks).lower()
+    return (
+        "invalid prompt" in joined
+        or "flagged as potentially violating" in joined
+        or "usage policy" in joined
+    )
 
 
 def _normalize_judge_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
