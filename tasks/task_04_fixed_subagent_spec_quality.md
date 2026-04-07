@@ -17,6 +17,8 @@ grading_weights:
 
 The main agent must delegate a documentation extraction task to a fixed subagent. The benchmark is not about the subagent itself. It is about whether the main agent provides enough context, constraints, and output requirements for the fixed subagent to succeed without clarification.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should create one delegation with explicit inputs, constraints, success criteria, and output format. The subagent should then be able to write `reports/extracted_api_summary.md` successfully.
@@ -35,7 +37,7 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import delegate_events, delegation_fields_present
 
-    delegations = delegate_events(trace)
+    delegations = delegate_events(trace, workspace_path)
     exactly_one = 1.0 if len(delegations) == 1 else 0.0
     spec_complete = 1.0 if delegations and delegation_fields_present(delegations[0]) else 0.0
 
