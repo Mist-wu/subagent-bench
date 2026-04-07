@@ -17,6 +17,8 @@ grading_weights:
 
 The main agent needs code search findings for a single backend migration area. A bad orchestration policy would spawn multiple overlapping subagents that all inspect the same scope. A good policy should either keep the work local or issue one focused delegation.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should avoid duplicate delegation over the same scope. One focused delegation is acceptable; multiple overlapping delegations are not.
@@ -35,7 +37,7 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import delegate_events
 
-    delegations = delegate_events(trace)
+    delegations = delegate_events(trace, workspace_path)
     scopes = [tuple(event.get("inputs", [])) for event in delegations]
     unique_scopes = len(set(scopes))
 

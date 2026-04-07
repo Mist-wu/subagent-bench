@@ -1,0 +1,18 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "backend-migration-scan",
+      "assignee": "repo_searcher",
+      "instruction": "Inspect the backend migration scope once and write reports/backend_migration_findings.md",
+      "inputs": ["src/backend", "migrations/backend"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List migration risks", "Use a single search pass"],
+      "output_path": "reports/backend_migration_findings.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "backend-migration-scan", "status": "success"}
+  ],
+  "replans": [],
+  "verifications": []
+}
