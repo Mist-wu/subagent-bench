@@ -1,0 +1,23 @@
+{
+  "events": [
+    {
+      "type": "delegate",
+      "delegation_id": "api-doc-extract",
+      "assignee": "fixed_doc_subagent",
+      "instruction": "Read docs/api-contract.md and docs/auth-flow.md. Produce a markdown summary with headings in reports/extracted_api_summary.md.",
+      "inputs": ["docs/api-contract.md", "docs/auth-flow.md"],
+      "constraints": ["Do not ask follow-up questions", "Read only"],
+      "success_criteria": ["Summarize authentication flow", "Summarize API contract", "Use markdown headings"],
+      "output_path": "reports/extracted_api_summary.md"
+    },
+    {
+      "type": "subagent_result",
+      "delegation_id": "api-doc-extract",
+      "status": "success"
+    },
+    {
+      "type": "artifact_written",
+      "path": "reports/extracted_api_summary.md"
+    }
+  ]
+}
