@@ -7,7 +7,26 @@ task_type: T7
 dimensions: ["recovery_replan_quality", "integration_quality", "result_verification_quality"]
 grading_type: hybrid
 timeout_seconds: 240
-workspace_files: []
+workspace_files:
+  - path: "reports/subagent_safe.md"
+    content: |
+      # Subagent Result A
+
+      Conclusion: rollout is safe.
+      Reasoning: no migration risk was observed in the sampled checks.
+  - path: "reports/subagent_unsafe.md"
+    content: |
+      # Subagent Result B
+
+      Conclusion: rollout is unsafe.
+      Reasoning: migration ordering has not been verified.
+  - path: "rollout-policy.md"
+    content: |
+      # Rollout Policy
+
+      Source of truth:
+      - Any rollout that changes required fields is unsafe until migration ordering is verified.
+      - Verification must cite the source document used for the decision.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +34,9 @@ grading_weights:
 
 ## Prompt
 
-Two subagents return conflicting conclusions about whether a rollout is safe. The main agent should not blindly merge them. It should verify the conflict by consulting a source-of-truth document, then produce `reports/final_decision.md`.
+Two subagents have already returned conflicting conclusions about whether a rollout is safe. Their outputs are in `reports/subagent_safe.md` and `reports/subagent_unsafe.md`. The main agent should not blindly merge them. It should verify the conflict by consulting `rollout-policy.md`, then produce `reports/final_decision.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root and record both subagent results plus the verification step.
 
 ## Expected Behavior
 

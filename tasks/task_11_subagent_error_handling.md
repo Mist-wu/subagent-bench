@@ -7,12 +7,17 @@ task_type: execution_recovery
 dimensions: ["timeout_error_handling", "completion_rate", "result_fidelity"]
 grading_type: automated
 timeout_seconds: 180
-workspace_files: []
+workspace_files:
+  - path: "inputs/fallback_source.txt"
+    content: |
+      Recovered summary
+
+      This fallback source contains the canonical notes for the release incident review.
 ---
 
 ## Prompt
 
-You are a subagent. A first tool call fails because a source document is missing. Recover by using the fallback document and still write `reports/recovered_summary.md`.
+You are a subagent. First try to read `inputs/primary_source.txt`, which is intentionally missing. Recover by using `inputs/fallback_source.txt` instead and still write `reports/recovered_summary.md`. Mention `fallback source` in the final report.
 
 ## Expected Behavior
 
@@ -32,8 +37,8 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import transcript_has_tool_call, transcript_has_tool_result_error
 
-    saw_failure = 1.0 if transcript_has_tool_result_error(trace, "read_primary") else 0.0
-    fallback = 1.0 if transcript_has_tool_call(trace, "read_fallback") else 0.0
+    saw_failure = 1.0 if transcript_has_tool_result_error(trace, "read", "primary_source.txt") else 0.0
+    fallback = 1.0 if transcript_has_tool_call(trace, "read", "fallback_source.txt") else 0.0
 
     artifact = Path(workspace_path) / "reports/recovered_summary.md"
     completion = 1.0 if artifact.exists() else 0.0

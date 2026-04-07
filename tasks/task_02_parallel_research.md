@@ -6,8 +6,27 @@ benchmark_target: C6a
 task_type: T4
 dimensions: ["dependency_correctness", "task_decomposition_quality", "integration_quality"]
 grading_type: hybrid
-timeout_seconds: 240
-workspace_files: []
+timeout_seconds: 300
+workspace_files:
+  - path: "inputs/frontend_rollout.md"
+    content: |
+      # Frontend Rollout Notes
+
+      - Client bundle recently added an untested lazy-loading path for billing pages.
+      - Feature flag `billing-redesign` is enabled for 5% of traffic.
+      - No mobile QA sign-off has been recorded yet.
+  - path: "inputs/backend_rollout.md"
+    content: |
+      # Backend Rollout Notes
+
+      - Queue workers were resized last week but no soak test was captured.
+      - A schema migration introduces a nullable-to-required transition for `invoice_id`.
+      - Rollback steps exist but have not been rehearsed.
+  - path: "launch_brief.md"
+    content: |
+      # Launch Brief
+
+      Pending research.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +34,9 @@ grading_weights:
 
 ## Prompt
 
-Prepare a launch brief by comparing frontend rollout risks and backend rollout risks. These two research streams can happen in parallel and should be delegated independently. The main agent should merge the findings into `launch_brief.md`.
+Prepare a launch brief by comparing frontend rollout risks and backend rollout risks. These two research streams can happen in parallel and should be delegated independently. Write the delegated outputs to `reports/frontend_risks.md` and `reports/backend_risks.md`, then merge the findings into `launch_brief.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root. Each delegation entry must include `delegation_id`, `assignee`, `instruction`, `inputs`, `success_criteria`, and `output_path`.
 
 ## Expected Behavior
 

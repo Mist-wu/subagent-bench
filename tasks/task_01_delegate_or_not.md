@@ -6,8 +6,45 @@ benchmark_target: C6a
 task_type: T1
 dimensions: ["delegation_decision_accuracy", "delegation_spec_completeness", "integration_quality"]
 grading_type: hybrid
-timeout_seconds: 180
-workspace_files: []
+timeout_seconds: 300
+workspace_files:
+  - path: "release-checklist.md"
+    content: |
+      # Release Checklist
+
+      - [ ] Rename the `Changelog` heading in `answer.md` to `Release Notes`.
+      - [ ] Run a repo-wide dependency audit and save it to `reports/dependency_audit.md`.
+      - [ ] Summarize the dependency audit in `answer.md`.
+  - path: "answer.md"
+    content: |
+      # Release Checklist Review
+
+      ## Changelog
+
+      - Trivial rename pending.
+      - Dependency audit pending.
+  - path: "package.json"
+    content: |
+      {
+        "name": "release-candidate",
+        "version": "0.9.0",
+        "scripts": {
+          "build": "tsc -p tsconfig.json"
+        },
+        "dependencies": {
+          "express": "^4.18.0",
+          "lodash": "^4.17.21"
+        }
+      }
+  - path: "src/api/server.ts"
+    content: |
+      import express from "express";
+
+      export function buildServer() {
+        const app = express();
+        app.get("/healthz", (_req, res) => res.json({ ok: true }));
+        return app;
+      }
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,16 +52,36 @@ grading_weights:
 
 ## Prompt
 
-Review a release checklist that contains one trivial action and one expensive repo-wide audit. The main agent should handle the trivial rename itself, but it should delegate the repo-wide audit to a subagent and then integrate the result into `answer.md`.
+Review the provided release checklist. The main agent should handle the trivial heading rename in `answer.md` directly, but it should delegate the repo-wide audit to a subagent. The delegated subagent should write its findings to `reports/dependency_audit.md`, and the main agent should integrate that result into `answer.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root with this shape:
+For benchmark observability, also write `delegation_trace.json` in the workspace root with this exact schema:
 
 ```json
 {
-  "delegations": [{ "...": "..." }],
-  "subagent_results": [{ "...": "..." }],
+  "delegations": [
+    {
+      "delegation_id": "dependency-audit",
+      "assignee": "subagent",
+      "instruction": "Run the repo-wide dependency audit",
+      "inputs": ["release-checklist.md", "package.json", "src/api/server.ts"],
+      "success_criteria": "Create reports/dependency_audit.md with blockers and warnings",
+      "output_path": "reports/dependency_audit.md"
+    }
+  ],
+  "subagent_results": [
+    {
+      "delegation_id": "dependency-audit",
+      "status": "success",
+      "summary": "Short summary of the delegated result"
+    }
+  ],
   "replans": [],
-  "verifications": []
+  "verifications": [
+    {
+      "artifact": "answer.md",
+      "checks": ["rename handled directly", "dependency audit integrated"]
+    }
+  ]
 }
 ```
 
@@ -57,7 +114,7 @@ def grade(trace: list, workspace_path: str) -> dict:
     integrated = 1.0 if artifact_contains(
         workspace_path,
         "answer.md",
-        ["dependency audit", "reports/dependency_audit.md", "rename handled directly"],
+        ["dependency audit", "reports/dependency_audit.md", "release notes"],
     ) else 0.0
 
     return {

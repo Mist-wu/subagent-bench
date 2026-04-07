@@ -687,6 +687,75 @@ def _load_transcript(
     return transcript, transcript_path
 
 
+def _transcript_has_async_handoff(transcript: List[Dict[str, Any]]) -> bool:
+    for entry in transcript:
+        if entry.get("type") != "message":
+            continue
+        message = entry.get("message", {})
+        role = message.get("role")
+        if role == "assistant":
+            for item in message.get("content", []):
+                if item.get("type") == "toolCall" and item.get("name") in {
+                    "sessions_spawn",
+                    "sessions_yield",
+                }:
+                    return True
+        if role == "toolResult" and message.get("toolName") == "sessions_spawn":
+            details = message.get("details", {})
+            if details.get("status") == "accepted":
+                return True
+    return False
+
+
+def _wait_for_transcript_settle(
+    agent_id: str,
+    session_id: str,
+    started_at: float,
+    initial_transcript_path: Optional[Path],
+    *,
+    quiet_seconds: float = 8.0,
+    max_wait_seconds: float = 180.0,
+) -> tuple[List[Dict[str, Any]], Optional[Path]]:
+    """Wait for OpenClaw async child-session updates to stop mutating the transcript."""
+    deadline = time.time() + max_wait_seconds
+    transcript_path = initial_transcript_path
+    transcript, transcript_path = _load_transcript(agent_id, session_id, started_at)
+    if transcript_path is None:
+        return transcript, transcript_path
+
+    try:
+        last_size = transcript_path.stat().st_size
+        last_mtime = transcript_path.stat().st_mtime
+    except OSError:
+        return transcript, transcript_path
+
+    last_change = time.time()
+    while time.time() < deadline:
+        time.sleep(2.0)
+        latest_transcript, latest_path = _load_transcript(agent_id, session_id, started_at)
+        if latest_path is not None:
+            transcript_path = latest_path
+        try:
+            current_size = transcript_path.stat().st_size
+            current_mtime = transcript_path.stat().st_mtime
+        except OSError:
+            transcript = latest_transcript
+            continue
+
+        if current_size != last_size or current_mtime != last_mtime or len(latest_transcript) != len(transcript):
+            transcript = latest_transcript
+            last_size = current_size
+            last_mtime = current_mtime
+            last_change = time.time()
+            continue
+
+        transcript = latest_transcript
+        if time.time() - last_change >= quiet_seconds:
+            break
+
+    return transcript, transcript_path
+
+
 def _extract_usage_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Sum token usage and cost from all assistant messages in transcript."""
     totals = {
@@ -835,6 +904,14 @@ def execute_openclaw_task(
             stderr = f"openclaw command not found: {exc}"
 
     transcript, transcript_path = _load_transcript(agent_id, session_id, start_time)
+    if transcript and _transcript_has_async_handoff(transcript):
+        transcript, transcript_path = _wait_for_transcript_settle(
+            agent_id,
+            session_id,
+            start_time,
+            transcript_path,
+            max_wait_seconds=max(60.0, min(240.0, timeout_seconds)),
+        )
     usage = _extract_usage_from_transcript(transcript)
     execution_time = time.time() - start_time
 

@@ -7,7 +7,14 @@ task_type: execution_transform
 dimensions: ["intent_understanding", "output_format_compliance", "completion_rate", "result_fidelity"]
 grading_type: hybrid
 timeout_seconds: 180
-workspace_files: []
+workspace_files:
+  - path: "data/employees.csv"
+    content: |
+      id,name,department,location
+      1,Alice,engineering,shanghai
+      2,Bob,engineering,seattle
+      3,Carol,sales,new-york
+      4,David,sales,singapore
 grading_weights:
   automated: 0.7
   llm_judge: 0.3
@@ -15,7 +22,16 @@ grading_weights:
 
 ## Prompt
 
-You are a subagent. Convert the provided employee data into the requested JSON format and write it to `data/employees.json`.
+You are a subagent. Convert `data/employees.csv` into JSON and write it to `data/employees.json` with this shape:
+
+```json
+{
+  "departments": {
+    "engineering": [{ "...": "..." }],
+    "sales": [{ "...": "..." }]
+  }
+}
+```
 
 ## Expected Behavior
 

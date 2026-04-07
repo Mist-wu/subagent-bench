@@ -6,8 +6,22 @@ benchmark_target: C6a
 task_type: T2
 dimensions: ["task_decomposition_quality", "delegation_decision_accuracy"]
 grading_type: hybrid
-timeout_seconds: 180
-workspace_files: []
+timeout_seconds: 240
+workspace_files:
+  - path: "docs/migration_scope.md"
+    content: |
+      # Backend Migration Scope
+
+      Focus only on the backend migration around invoice persistence.
+      Avoid duplicate investigation of the same files.
+  - path: "src/backend/migration_service.ts"
+    content: |
+      export function migrateInvoiceRecord(record: { invoiceId?: string }) {
+        if (!record.invoiceId) {
+          throw new Error("missing invoice id");
+        }
+        return { migrated: true, invoiceId: record.invoiceId };
+      }
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +29,9 @@ grading_weights:
 
 ## Prompt
 
-The main agent needs code search findings for a single backend migration area. A bad orchestration policy would spawn multiple overlapping subagents that all inspect the same scope. A good policy should either keep the work local or issue one focused delegation.
+The main agent needs code search findings for a single backend migration area. A bad orchestration policy would spawn multiple overlapping subagents that all inspect the same scope. A good policy should either keep the work local or issue one focused delegation that writes `reports/backend_migration_findings.md` and explicitly notes it was done in a single search pass.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root.
 
 ## Expected Behavior
 

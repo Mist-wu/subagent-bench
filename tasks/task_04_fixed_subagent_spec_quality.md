@@ -6,8 +6,24 @@ benchmark_target: C6a
 task_type: T5
 dimensions: ["delegation_spec_completeness", "assignment_accuracy"]
 grading_type: hybrid
-timeout_seconds: 180
-workspace_files: []
+timeout_seconds: 240
+workspace_files:
+  - path: "docs/api_reference.md"
+    content: |
+      # API Reference
+
+      ## POST /v1/invoices
+      Requires auth scope `billing:write`.
+      Rate limit: 60 requests/minute.
+
+      ## GET /v1/invoices/{id}
+      Requires auth scope `billing:read`.
+      Rate limit: 120 requests/minute.
+  - path: "docs/release_notes.md"
+    content: |
+      # Release Notes Context
+
+      This release introduces the new invoice APIs and updated auth scopes.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +31,9 @@ grading_weights:
 
 ## Prompt
 
-The main agent must delegate a documentation extraction task to a fixed subagent. The benchmark is not about the subagent itself. It is about whether the main agent provides enough context, constraints, and output requirements for the fixed subagent to succeed without clarification.
+The main agent must delegate a documentation extraction task to a fixed subagent. The benchmark is not about the subagent itself. It is about whether the main agent provides enough context, constraints, and output requirements for the fixed subagent to write `reports/extracted_api_summary.md` in markdown with clear headings for endpoints, auth scopes, and rate limits.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root. The single delegation entry must include the exact output path.
 
 ## Expected Behavior
 

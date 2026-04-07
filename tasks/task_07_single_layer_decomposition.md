@@ -6,8 +6,26 @@ benchmark_target: C6a
 task_type: T2
 dimensions: ["task_decomposition_quality", "assignment_accuracy", "delegation_spec_completeness"]
 grading_type: hybrid
-timeout_seconds: 240
-workspace_files: []
+timeout_seconds: 300
+workspace_files:
+  - path: "inputs/frontend_readiness.md"
+    content: |
+      # Frontend Readiness
+
+      - Accessibility review incomplete.
+      - Mobile screenshots missing.
+  - path: "inputs/backend_readiness.md"
+    content: |
+      # Backend Readiness
+
+      - Queue retry metrics missing.
+      - Migration rollback rehearsal not documented.
+  - path: "inputs/docs_readiness.md"
+    content: |
+      # Docs Readiness
+
+      - Runbook lacks post-deploy verification steps.
+      - Support notes are still in draft.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +33,9 @@ grading_weights:
 
 ## Prompt
 
-Break a medium-complexity launch-prep request into 2 to 4 independent subproblems. The main agent should delegate each slice once, avoid gaps and overlap, and merge the results into `reports/launch_plan.md`.
+Break a medium-complexity launch-prep request into 2 to 4 independent subproblems. The main agent should delegate each slice once, avoid gaps and overlap, and merge the results into `reports/launch_plan.md`. At minimum, the final plan should cover frontend readiness, backend readiness, and docs readiness.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root.
 
 ## Expected Behavior
 

@@ -6,8 +6,27 @@ benchmark_target: C6a
 task_type: T3
 dimensions: ["dependency_correctness", "task_decomposition_quality", "recovery_replan_quality"]
 grading_type: hybrid
-timeout_seconds: 240
-workspace_files: []
+timeout_seconds: 300
+workspace_files:
+  - path: "schema/current_schema.sql"
+    content: |
+      CREATE TABLE invoices (
+        id UUID PRIMARY KEY,
+        invoice_id TEXT NULL,
+        status TEXT NOT NULL
+      );
+  - path: "schema/target_schema.sql"
+    content: |
+      CREATE TABLE invoices (
+        id UUID PRIMARY KEY,
+        invoice_id TEXT NOT NULL,
+        status TEXT NOT NULL
+      );
+  - path: "src/remediation_notes.md"
+    content: |
+      # Remediation Notes
+
+      Application code still assumes `invoice_id` may be null in several write paths.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +34,9 @@ grading_weights:
 
 ## Prompt
 
-Plan a migration where schema analysis must happen before code remediation. The main agent should not run the remediation subtask before the dependency input is ready. It should produce `reports/dependency_plan.md`.
+Plan a migration where schema analysis must happen before code remediation. The main agent should delegate the schema scan to `reports/schema_scan.md` first, then delegate remediation planning to `reports/remediation_plan.md` using that scan as an input, and finally produce `reports/dependency_plan.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root.
 
 ## Expected Behavior
 

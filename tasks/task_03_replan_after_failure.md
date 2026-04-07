@@ -6,8 +6,28 @@ benchmark_target: C6a
 task_type: T6
 dimensions: ["recovery_replan_quality", "delegation_spec_completeness", "integration_quality"]
 grading_type: hybrid
-timeout_seconds: 240
-workspace_files: []
+timeout_seconds: 300
+workspace_files:
+  - path: "docs/migration_brief.md"
+    content: |
+      # Migration Brief
+
+      We are renaming `invoice_id` semantics across services.
+      The brief is incomplete on purpose. See the API contract and dependency notes for the missing edge cases.
+  - path: "docs/api_contract.md"
+    content: |
+      # API Contract
+
+      - `invoice_id` becomes required on write paths starting in v2.
+      - Existing workers still emit payloads without `invoice_id`.
+      - Consumers reject messages that omit the field.
+  - path: "docs/dependency_notes.md"
+    content: |
+      # Dependency Notes
+
+      - Billing worker deploys after API deploy.
+      - Retry queue keeps old payloads for 24 hours.
+      - Rollback needs dual-write compatibility.
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
@@ -15,9 +35,9 @@ grading_weights:
 
 ## Prompt
 
-Audit a risky migration plan. The first delegated search fails because the subagent lacks enough context. The main agent should notice the failure, replan, send a corrected delegation, and still finish the final risk register.
+Audit a risky migration plan. The first delegated search should be treated as failed because it does not include enough context. The main agent should notice the failure, replan, send a corrected delegation that includes `docs/api_contract.md` and `docs/dependency_notes.md`, and still finish `reports/risk_register.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+For benchmark observability, write `delegation_trace.json` in the workspace root. Record the failed first delegation, the recovery/replan step, and the later successful delegation.
 
 ## Expected Behavior
 
