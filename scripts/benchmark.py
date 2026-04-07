@@ -6,7 +6,7 @@ This script orchestrates benchmarking of OpenClaw agents using tasks loaded
 from the tasks/ directory.
 """
 # /// script
-# requires-python = ">=3.10"
+# requires-python = ">=3.11"
 # dependencies = [
 #     "pyyaml>=6.0.1",
 # ]

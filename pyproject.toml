@@ -7,7 +7,7 @@ name = "subagent-bench"
 version = "0.1.0"
 description = "A benchmark scaffold for main-agent delegation and subagent orchestration."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
   "PyYAML>=6.0",
 ]
