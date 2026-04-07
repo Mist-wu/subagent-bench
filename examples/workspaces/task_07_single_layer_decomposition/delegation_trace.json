@@ -1,0 +1,38 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "frontend-readiness",
+      "assignee": "frontend_reviewer",
+      "instruction": "Review frontend readiness and write reports/frontend_readiness.md",
+      "inputs": ["src/frontend", "docs/frontend-checklist.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List blockers", "Summarize readiness"],
+      "output_path": "reports/frontend_readiness.md"
+    },
+    {
+      "delegation_id": "backend-readiness",
+      "assignee": "backend_reviewer",
+      "instruction": "Review backend readiness and write reports/backend_readiness.md",
+      "inputs": ["src/backend", "docs/backend-checklist.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List blockers", "Summarize readiness"],
+      "output_path": "reports/backend_readiness.md"
+    },
+    {
+      "delegation_id": "docs-readiness",
+      "assignee": "docs_reviewer",
+      "instruction": "Review docs readiness and write reports/docs_readiness.md",
+      "inputs": ["docs/", "release-notes/"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List missing docs", "Summarize readiness"],
+      "output_path": "reports/docs_readiness.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "frontend-readiness", "status": "success"},
+    {"delegation_id": "backend-readiness", "status": "success"},
+    {"delegation_id": "docs-readiness", "status": "success"}
+  ],
+  "replans": [],
+  "verifications": []
+}

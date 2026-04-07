@@ -17,6 +17,8 @@ grading_weights:
 
 Break a medium-complexity launch-prep request into 2 to 4 independent subproblems. The main agent should delegate each slice once, avoid gaps and overlap, and merge the results into `reports/launch_plan.md`.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should decompose the task into a small set of complete, non-redundant subproblems. Each delegation should own a distinct scope and output path. The final launch plan should reflect all delegated areas.
@@ -35,7 +37,7 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import delegate_events, delegation_fields_present
 
-    delegations = delegate_events(trace)
+    delegations = delegate_events(trace, workspace_path)
     right_count = 1.0 if 2 <= len(delegations) <= 4 else 0.0
     unique_outputs = len({event.get("output_path") for event in delegations})
     distinct_scopes = 1.0 if delegations and unique_outputs == len(delegations) else 0.0
