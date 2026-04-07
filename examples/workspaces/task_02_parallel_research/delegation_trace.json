@@ -1,0 +1,28 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "frontend-risks",
+      "assignee": "frontend_researcher",
+      "instruction": "Review rollout risks in src/frontend and write reports/frontend_findings.md",
+      "inputs": ["src/frontend", "docs/frontend-rollout.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List top risks", "Cite affected paths"],
+      "output_path": "reports/frontend_findings.md"
+    },
+    {
+      "delegation_id": "backend-risks",
+      "assignee": "backend_researcher",
+      "instruction": "Review rollout risks in src/backend and write reports/backend_findings.md",
+      "inputs": ["src/backend", "docs/backend-rollout.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List top risks", "Cite affected paths"],
+      "output_path": "reports/backend_findings.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "frontend-risks", "status": "success"},
+    {"delegation_id": "backend-risks", "status": "success"}
+  ],
+  "replans": [],
+  "verifications": []
+}
