@@ -35,7 +35,7 @@ def main() -> None:
         loader = TaskLoader(Path(args.tasks_dir))
         for task in loader.load_all():
             dims = ",".join(task.dimensions)
-            print(f"{task.task_id}\t{task.category}\t{dims}\t{task.name}")
+            print(f"{task.task_id}\t{task.benchmark_target}\t{task.task_type}\t{task.category}\t{dims}\t{task.name}")
         return
 
     if args.command == "validate-traces":

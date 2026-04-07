@@ -2,7 +2,9 @@
 id: task_01_delegate_or_not
 name: Delegate Only The Expensive Slice
 category: orchestration
-dimensions: ["delegation_policy", "integration"]
+benchmark_target: C6a
+task_type: T1
+dimensions: ["delegation_decision_accuracy", "delegation_spec_completeness", "integration_quality"]
 grading_type: automated
 timeout_seconds: 180
 workspace_files: []
@@ -45,9 +47,10 @@ def grade(trace: list, workspace_path: str) -> dict:
     ) else 0.0
 
     return {
-        "single_delegation": only_one,
-        "delegation_spec_quality": complete_spec,
+        "delegates_when_needed": only_one,
+        "avoids_over_delegation": only_one,
+        "delegation_spec_completeness": complete_spec,
         "delegated_artifact_exists": delegated_artifact,
-        "main_agent_integration": integrated,
+        "integration_quality": integrated,
     }
 ```

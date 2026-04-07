@@ -2,7 +2,9 @@
 id: task_xx_name
 name: Task Display Name
 category: orchestration
-dimensions: ["delegation_policy"]
+benchmark_target: C6a
+task_type: T1
+dimensions: ["delegation_decision_accuracy"]
 grading_type: automated
 timeout_seconds: 180
 workspace_files: []
@@ -37,4 +39,6 @@ def grade(trace: list, workspace_path: str) -> dict:
 - `trace` 是结构化 orchestration 事件列表，不再局限于普通 transcript。
 - 推荐事件：`delegate`、`subagent_result`、`replan`、`assistant_message`、`artifact_written`。
 - 如果后面要接 judge，可以在 trace 根对象增加 `judge_result`，并把 `grading_type` 改成 `hybrid` 或 `llm_judge`。
-- `dimensions` 用于后续汇总，例如 `delegation_policy`、`parallelization`、`spec_quality`、`verification`。
+- `benchmark_target` 取值建议为 `C6a`、`C6b` 或 `System`。
+- `task_type` 目前按 T1-T7 编号。
+- `dimensions` 用于后续汇总，例如 `delegation_decision_accuracy`、`dependency_correctness`、`delegation_spec_completeness`、`result_fidelity`。

@@ -2,7 +2,9 @@
 id: task_03_replan_after_failure
 name: Recover After A Failed Delegation
 category: orchestration
-dimensions: ["replanning", "integration"]
+benchmark_target: C6a
+task_type: T6
+dimensions: ["recovery_replan_quality", "delegation_spec_completeness", "integration_quality"]
 grading_type: automated
 timeout_seconds: 240
 workspace_files: []

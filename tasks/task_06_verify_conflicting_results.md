@@ -2,7 +2,9 @@
 id: task_06_verify_conflicting_results
 name: Verify Conflicting Subagent Results
 category: orchestration
-dimensions: ["verification", "integration", "replanning"]
+benchmark_target: C6a
+task_type: T7
+dimensions: ["recovery_replan_quality", "integration_quality", "result_verification_quality"]
 grading_type: automated
 timeout_seconds: 240
 workspace_files: []

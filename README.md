@@ -1,6 +1,9 @@
 # subagent-bench
 
-一个面向多 agent 系统的 benchmark 基线仓库，重点补 `PinchBench` 还没有单独测清楚的部分：`main-agent delegation / orchestration`。
+一个面向多 agent 系统的 benchmark 基线仓库，重点补 `PinchBench` 还没有单独测清楚的两部分：
+
+- `C6a: Main-Agent Delegation / Orchestration`
+- `C6b: Subagent Execution`
 
 这个仓库刻意借鉴了 `PinchBench` 最值得复用的设计：
 
@@ -11,16 +14,17 @@
 同时它补了几件 `PinchBench` 目前没有显式建模的能力：
 
 - 把 `main agent` 的任务拆解、委托决策、委托说明质量、结果回收与 replan 单独打分。
+- 把 `subagent execution` 单独建成可自动评分的任务集。
 - 引入结构化 orchestration trace，而不是只看最终文件。
 - 把“主 agent 分配错了”和“subagent 执行差了”分开归因。
 
 ## 当前实现
 
-当前仓库已经包含一个最小可跑版本：
+当前仓库已经包含一个可跑的双层 benchmark 基线：
 
 - `tasks/`：沿用 `PinchBench` 风格的任务定义。
 - `src/subagent_bench/`：任务加载、trace 读取、自动评分、CLI。
-- `examples/traces/`：6 个 main-agent orchestration 示例 trace。
+- `examples/traces/`：`C6a + C6b` 示例 trace。
 - `examples/workspaces/`：与示例 trace 对应的输出工件。
 - `tests/`：基础回归测试。
 - `docs/`：`PinchBench` 借鉴/改进分析，以及 benchmark 设计文档。
@@ -36,6 +40,7 @@
 - `replan`：主 agent 在失败或新信息后重新规划
 - `verification`：主 agent 对冲突结果做二次核验
 - `assistant_message`：主 agent 或子 agent 的自然语言消息
+- `tool_use` / `tool_result`：用于 `C6b` 执行质量评分
 - `artifact_written`：写入关键输出
 
 示例 `delegate` 事件：
@@ -79,26 +84,38 @@ python -m subagent_bench.cli grade --traces-dir examples/traces --workspace-root
 pytest
 ```
 
-## 初始任务集
+## 当前任务集
 
 - `task_01_delegate_or_not`
-  - 测试是否只把真正昂贵的子问题委托出去。
-- `task_02_parallel_research`
-  - 测试是否识别可并行子任务、避免重复委托、并正确整合。
-- `task_03_replan_after_failure`
-  - 测试 subagent 失败后的回收、补充上下文和重规划。
-- `task_04_fixed_subagent_spec_quality`
-  - 固定 subagent，只测主 agent 委托说明质量。
+  - `C6a / T1`，测是否该委托。
 - `task_05_avoid_redundant_delegation`
-  - 测试是否避免多个 subagent 对同一范围重复劳动。
+  - `C6a / T2`，测单层拆分的冗余控制。
+- `task_07_single_layer_decomposition`
+  - `C6a / T2`，测 2-4 个子任务的完整拆分。
+- `task_08_dependency_aware_decomposition`
+  - `C6a / T3`，测依赖顺序与错误并行。
+- `task_02_parallel_research`
+  - `C6a / T4`，测并行识别与整合。
+- `task_04_fixed_subagent_spec_quality`
+  - `C6a / T5`，固定 subagent，只测 delegation spec。
+- `task_03_replan_after_failure`
+  - `C6a / T6`，测失败恢复与 replan。
 - `task_06_verify_conflicting_results`
-  - 测试冲突结果下的验证与最终裁决。
+  - `C6a / T7`，测冲突结果下的验证与最终裁决。
+- `task_09_subagent_code_search`
+  - `C6b`，测意图理解、工具使用和结果保真。
+- `task_10_subagent_output_transform`
+  - `C6b`，测输出格式与结果保真。
+- `task_11_subagent_error_handling`
+  - `C6b`，测异常恢复与降级。
 
 ## 当前能力
 
 - 按任务评分 orchestration trace
+- 按任务评分 subagent execution trace
 - 校验 trace schema
-- 输出任务级、category 级、dimension 级汇总
+- 输出任务级、benchmark target 级、task type 级、dimension 级汇总
+- 输出系统级指标：`end_to_end_task_success`、`over_delegation_rate`、`under_delegation_rate`、`execution_normalized_delegation_score`
 - 支持后续接入 `judge_result`
 
 ## 文档
@@ -111,5 +128,6 @@ pytest
 如果你后面要接真实 runtime，我建议优先补这几项：
 
 - trace exporter：把真实主 agent / subagent 事件导出为这里的结构。
+- runtime cost / latency 采集：补齐系统级效率指标。
 - execution-normalized delegation score：固定 subagent，只比较 main agent 的委托质量。
 - 双层评分：`delegation_score` 和 `execution_score` 分开展示，再给一个 end-to-end 总分。

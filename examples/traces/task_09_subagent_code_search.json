@@ -1,0 +1,18 @@
+{
+  "events": [
+    {
+      "type": "assistant_message",
+      "agent": "subagent",
+      "content": "I will scan for deprecated db.rawQuery() usage and prepare the report."
+    },
+    {
+      "type": "tool_use",
+      "tool": "rg",
+      "arguments": ["db.rawQuery()", "src/"]
+    },
+    {
+      "type": "artifact_written",
+      "path": "reports/raw_query_report.md"
+    }
+  ]
+}

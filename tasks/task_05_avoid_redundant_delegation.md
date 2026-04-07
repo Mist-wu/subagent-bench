@@ -2,7 +2,9 @@
 id: task_05_avoid_redundant_delegation
 name: Avoid Redundant Delegation
 category: orchestration
-dimensions: ["delegation_policy", "parallelization"]
+benchmark_target: C6a
+task_type: T2
+dimensions: ["task_decomposition_quality", "delegation_decision_accuracy"]
 grading_type: automated
 timeout_seconds: 180
 workspace_files: []

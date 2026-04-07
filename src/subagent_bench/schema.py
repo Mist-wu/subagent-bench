@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 
 REQUIRED_FIELDS_BY_EVENT = {
@@ -10,6 +10,8 @@ REQUIRED_FIELDS_BY_EVENT = {
     "verification": ["source", "reason"],
     "artifact_written": ["path"],
     "assistant_message": ["agent", "content"],
+    "tool_use": ["tool"],
+    "tool_result": ["tool", "status"],
 }
 
 

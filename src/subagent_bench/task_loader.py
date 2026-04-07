@@ -33,6 +33,8 @@ class TaskLoader:
             task_id=metadata.get("id", ""),
             name=metadata.get("name", ""),
             category=metadata.get("category", ""),
+            benchmark_target=metadata.get("benchmark_target", "C6a"),
+            task_type=metadata.get("task_type", ""),
             dimensions=metadata.get("dimensions", []),
             grading_type=metadata.get("grading_type", "automated"),
             timeout_seconds=int(metadata.get("timeout_seconds", 120)),

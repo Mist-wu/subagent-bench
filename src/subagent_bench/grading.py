@@ -118,5 +118,7 @@ def _strip_metadata_from_average(scores: Dict[str, Any]) -> float:
 
 def _attach_task_metadata(result: GradeResult, task: Task) -> GradeResult:
     result.breakdown["__category__"] = task.category
+    result.breakdown["__benchmark_target__"] = task.benchmark_target
+    result.breakdown["__task_type__"] = task.task_type
     result.breakdown["__dimensions__"] = list(task.dimensions)
     return result

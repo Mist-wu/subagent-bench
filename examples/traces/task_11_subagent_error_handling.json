@@ -1,0 +1,24 @@
+{
+  "events": [
+    {
+      "type": "tool_use",
+      "tool": "read_primary",
+      "arguments": ["docs/missing_source.md"]
+    },
+    {
+      "type": "tool_result",
+      "tool": "read_primary",
+      "status": "error",
+      "error": "file not found"
+    },
+    {
+      "type": "tool_use",
+      "tool": "read_fallback",
+      "arguments": ["docs/fallback_source.md"]
+    },
+    {
+      "type": "artifact_written",
+      "path": "reports/recovered_summary.md"
+    }
+  ]
+}

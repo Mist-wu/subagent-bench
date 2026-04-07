@@ -85,3 +85,10 @@
 2. 增加 orchestration trace 观测层。
 3. 在任务层面专门设计 delegation / replan / integration 题目。
 4. 再决定是否需要进一步拆成独立 runtime benchmark。
+
+进一步说，比较合理的结构是：
+
+- 用 `PinchBench` 的任务文件风格承载 `C6a / C6b`。
+- 用结构化 trace 显式区分 `分配错` 和 `执行错`。
+- 把 `T1-T7` 作为主 agent orchestration 任务族。
+- 额外补一组 `C6b` 执行任务，单独测 subagent quality。

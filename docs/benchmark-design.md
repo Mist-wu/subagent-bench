@@ -1,81 +1,108 @@
 # Benchmark Design
 
-## 目标
+## 二、评测对象
 
-这个仓库聚焦一个更窄、也更容易被现有 benchmark 忽略的问题：
+### C6a: Main-Agent Delegation / Orchestration
 
-`main agent` 是否能正确判断何时委托、如何拆解任务、如何写出高质量委托，以及如何在 subagent 失败后重规划。
+测主 agent 的任务分配能力：
 
-## 基本原则
+- 是否该委托
+- 如何拆分子任务
+- 是否识别依赖与并行关系
+- 是否把任务派给正确的 subagent / skill / tool path
+- 委托说明是否完整
+- subagent 返回后是否整合、校验、补救、replan
 
-### 1. 主 agent 能力单独评估
+### C6b: Subagent Execution
 
-这个库优先测：
+测子 agent 的执行能力：
 
-- delegation policy
-- task decomposition
-- prompt packaging for subagents
-- integration and recovery
+- 是否正确理解委托意图
+- 是否独立使用工具完成任务
+- 是否按要求产出结果
+- 是否处理异常、超时、缺信息场景
 
-它不假设 subagent execution 已经天然正确。
+## 三、评测输入与观测信号
 
-### 2. 自动评分优先
+除最终输出文件外，必须记录中间过程：
 
-每个任务都应尽量用确定性规则评分，例如：
+- 是否 spawn subagent
+- spawn 数量
+- 每个 subtask 的 delegation spec
+- subtask 执行顺序与依赖关系
+- subagent 返回结果
+- 主 agent 的整合与重试行为
+- 全部 transcript / tool_use / skill routing 轨迹
 
-- delegation 数量
-- 是否缺字段
-- 是否提前集成
-- 是否存在重复委托
-- 是否发生 replan
-- 关键 artifact 是否存在且包含必要字段
+没有这些中间信号，就只能测 end-to-end，无法区分“分配错”还是“执行错”。
 
-### 3. 任务必须能映射到真实 agent 失败模式
+## 四、核心指标
 
-任务不是为了“做难题”，而是为了覆盖真实多 agent 失败模式：
+### C6a 指标
 
-- 过度委托
-- 漏委托
-- 重复委托
-- 依赖顺序错误
-- 委托说明不完整
-- 子任务失败后停摆
-- 子任务结果冲突时不会校验
+- `delegation_decision_accuracy`
+- `task_decomposition_quality`
+- `dependency_correctness`
+- `assignment_accuracy`
+- `delegation_spec_completeness`
+- `recovery_replan_quality`
+- `integration_quality`
+- `result_verification_quality`
 
-## 当前任务维度
+### C6b 指标
 
-- `delegation_policy`
-- `parallelization`
-- `spec_quality`
-- `replanning`
-- `integration`
-- `verification`
+- `intent_understanding`
+- `tool_use_correctness`
+- `completion_rate`
+- `output_format_compliance`
+- `timeout_error_handling`
+- `result_fidelity`
 
-## 当前任务集
+### 系统级指标
 
-### task_01_delegate_or_not
+- `end_to_end_task_success`
+- `cost / latency`
+- `over_delegation_rate`
+- `under_delegation_rate`
+- `execution_normalized_delegation_score`
 
-测主 agent 是否只把昂贵部分委托出去。
+当前仓库已经内置：
 
-### task_02_parallel_research
+- `end_to_end_task_success`
+- `over_delegation_rate`
+- `under_delegation_rate`
+- `execution_normalized_delegation_score`
 
-测主 agent 是否识别两个互相独立的研究流，并在两边返回后再集成。
+`cost / latency` 仍依赖接入真实 runtime trace。
 
-### task_03_replan_after_failure
+## 五、任务类型
 
-测 subagent 第一次失败后，主 agent 是否补上下文并重试。
+- `T1` 是否委托
+- `T2` 单层拆分
+- `T3` 依赖型拆分
+- `T4` 并行型拆分
+- `T5` 委托说明质量
+- `T6` 失败恢复
+- `T7` 多 subagent 聚合
 
-### task_04_fixed_subagent_spec_quality
+## 当前任务映射
 
-固定 subagent，只看主 agent 委托说明质量是否足以让 subagent 独立完成。
+### C6a
 
-### task_05_avoid_redundant_delegation
+- `task_01_delegate_or_not` -> `T1`
+- `task_05_avoid_redundant_delegation` -> `T2`
+- `task_07_single_layer_decomposition` -> `T2`
+- `task_08_dependency_aware_decomposition` -> `T3`
+- `task_02_parallel_research` -> `T4`
+- `task_04_fixed_subagent_spec_quality` -> `T5`
+- `task_03_replan_after_failure` -> `T6`
+- `task_06_verify_conflicting_results` -> `T7`
 
-测主 agent 是否避免把高度重叠的问题派给多个 subagent 重复做。
+### C6b
 
-### task_06_verify_conflicting_results
-
-测两个 subagent 返回冲突结论时，主 agent 是否会做验证，而不是直接拼接。
+- `task_09_subagent_code_search`
+- `task_10_subagent_output_transform`
+- `task_11_subagent_error_handling`
 
 ## Trace 契约
 
@@ -91,23 +118,22 @@
 }
 ```
 
-可选字段：
+当前 schema 已支持：
 
-- `judge_result`
-- `timestamp`
-- `agent`
-- `metadata`
+- `delegate`
+- `subagent_result`
+- `replan`
+- `verification`
+- `assistant_message`
+- `artifact_written`
+- `tool_use`
+- `tool_result`
 
 ## 结果解释
 
-建议同时看三层结果：
+建议同时看四层结果：
 
-1. 任务分数
-2. 维度平均分
-3. end-to-end 成功率
-
-如果后续引入真实 subagent execution，可以进一步拆出：
-
-- `delegation_score`
-- `execution_score`
-- `integration_score`
+1. 单任务分数
+2. `benchmark_target_scores`
+3. `task_type_scores`
+4. `system_metrics`

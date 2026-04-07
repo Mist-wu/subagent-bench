@@ -2,7 +2,9 @@
 id: task_04_fixed_subagent_spec_quality
 name: Fixed Subagent Spec Quality
 category: orchestration
-dimensions: ["spec_quality", "delegation_policy"]
+benchmark_target: C6a
+task_type: T5
+dimensions: ["delegation_spec_completeness", "assignment_accuracy"]
 grading_type: automated
 timeout_seconds: 180
 workspace_files: []

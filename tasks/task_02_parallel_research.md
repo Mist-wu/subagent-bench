@@ -2,7 +2,9 @@
 id: task_02_parallel_research
 name: Parallelize Independent Research Streams
 category: orchestration
-dimensions: ["parallelization", "integration"]
+benchmark_target: C6a
+task_type: T4
+dimensions: ["dependency_correctness", "task_decomposition_quality", "integration_quality"]
 grading_type: automated
 timeout_seconds: 240
 workspace_files: []

@@ -1,0 +1,12 @@
+{
+  "departments": {
+    "engineering": [
+      {"name": "Ada", "salary_k": 120},
+      {"name": "Linus", "salary_k": 118}
+    ],
+    "sales": [
+      {"name": "Mia", "salary_k": 90},
+      {"name": "Noah", "salary_k": 95}
+    ]
+  }
+}
