@@ -1,66 +1,54 @@
 from __future__ import annotations
 
 import json as jsonlib
+import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 
 def delegate_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    trace_list = list(trace)
+    native = _native_delegate_events(trace_list)
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
-        return list(trace_bundle.get("delegations", []))
-    events = [event for event in trace if event.get("type") == "delegate"]
-    if events:
-        return events
-
-    parsed: List[Dict[str, Any]] = []
-    for event in trace:
-        if event.get("type") != "message":
-            continue
-        message = event.get("message", {})
-        if message.get("role") != "assistant":
-            continue
-        for item in message.get("content", []):
-            if item.get("type") != "toolCall" or item.get("name") != "sessions_spawn":
-                continue
-            args = item.get("arguments", {})
-            parsed.append(
-                {
-                    "delegation_id": args.get("label") or args.get("task") or item.get("id"),
-                    "assignee": args.get("runtime") or args.get("label") or "subagent",
-                    "instruction": args.get("task", ""),
-                    "inputs": [args.get("cwd")] if args.get("cwd") else [],
-                    "success_criteria": "Subagent completes the requested delegated work.",
-                    "output_path": _extract_output_path(args.get("task", "")),
-                }
-            )
-    return parsed
+        native = _merge_event_lists(native, list(trace_bundle.get("delegations", [])), "delegation_id")
+    return native
 
 
 def subagent_results(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    trace_list = list(trace)
+    native = _native_subagent_results(trace_list)
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
-        return list(trace_bundle.get("subagent_results", []))
-    return [event for event in trace if event.get("type") == "subagent_result"]
+        native = _merge_event_lists(
+            native,
+            list(trace_bundle.get("subagent_results", [])),
+            "delegation_id",
+        )
+    return native
 
 
 def replan_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    trace_list = list(trace)
+    native = _native_replan_events(trace_list)
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
-        return list(trace_bundle.get("replans", []))
-    return [event for event in trace if event.get("type") == "replan"]
+        native = _merge_event_lists(native, list(trace_bundle.get("replans", [])), "reason")
+    return native
 
 
 def verification_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    trace_list = list(trace)
+    native = _native_verification_events(trace_list)
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
         verifications = list(trace_bundle.get("verifications", []))
         if verifications:
-            return verifications
+            native = _merge_event_lists(native, verifications, "reason")
         verification_step = trace_bundle.get("verification_step")
         if isinstance(verification_step, dict):
-            return [verification_step]
-    return [event for event in trace if event.get("type") == "verification"]
+            native = _merge_event_lists(native, [verification_step], "reason")
+    return native
 
 
 def load_delegation_trace(workspace_path: str | None) -> Dict[str, Any]:
@@ -187,3 +175,316 @@ def _extract_output_path(instruction: str) -> str:
         if "/" in token and "." in token:
             return token.strip(".,:;")
     return ""
+
+
+def _native_delegate_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    structured = [
+        dict(event)
+        for event in trace
+        if event.get("type") == "delegate"
+    ]
+    if structured:
+        return structured
+
+    tool_results = _sessions_spawn_tool_results(trace)
+    parsed: List[Dict[str, Any]] = []
+    for index, event in enumerate(trace):
+        if event.get("type") != "message":
+            continue
+        message = event.get("message", {})
+        if message.get("role") != "assistant":
+            continue
+        for item in _message_items(message):
+            if item.get("type") != "toolCall" or item.get("name") != "sessions_spawn":
+                continue
+            args = item.get("arguments", {})
+            tool_result = tool_results.get(str(item.get("id", "")), {})
+            parsed.append(
+                {
+                    "type": "delegate",
+                    "delegation_id": args.get("label") or args.get("task") or item.get("id"),
+                    "assignee": args.get("agentId") or args.get("runtime") or args.get("label") or "subagent",
+                    "instruction": args.get("task", ""),
+                    "inputs": [args.get("cwd")] if args.get("cwd") else [],
+                    "success_criteria": "Subagent completes the requested delegated work.",
+                    "output_path": _extract_output_path(args.get("task", "")),
+                    "runtime": args.get("runtime"),
+                    "mode": args.get("mode"),
+                    "child_session_key": tool_result.get("childSessionKey"),
+                    "run_id": tool_result.get("runId"),
+                    "status": tool_result.get("status"),
+                    "__index__": index,
+                }
+            )
+    return parsed
+
+
+def _native_subagent_results(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    structured = [
+        dict(event)
+        for event in trace
+        if event.get("type") == "subagent_result"
+    ]
+    parsed = structured[:]
+    for index, event in enumerate(trace):
+        for internal_event in _iter_internal_task_completion_events(event):
+            parsed.append(
+                {
+                    "type": "subagent_result",
+                    "delegation_id": internal_event.get("taskLabel")
+                    or internal_event.get("childSessionKey")
+                    or internal_event.get("childSessionId")
+                    or f"completion-{index}",
+                    "status": _normalize_subagent_status(
+                        internal_event.get("status"),
+                        internal_event.get("statusLabel"),
+                    ),
+                    "summary": internal_event.get("result", ""),
+                    "child_session_key": internal_event.get("childSessionKey"),
+                    "child_session_id": internal_event.get("childSessionId"),
+                    "announce_type": internal_event.get("announceType"),
+                    "__index__": index,
+                }
+            )
+    return _dedupe_results(parsed)
+
+
+def _native_replan_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    structured = [
+        dict(event)
+        for event in trace
+        if event.get("type") == "replan"
+    ]
+    if structured:
+        return structured
+
+    delegations = delegate_events(trace)
+    results = subagent_results(trace)
+    replans: List[Dict[str, Any]] = []
+    for result in results:
+        if result.get("status") != "failed":
+            continue
+        result_index = int(result.get("__index__", -1))
+        later_delegation = next(
+            (
+                event
+                for event in delegations
+                if int(event.get("__index__", -1)) > result_index
+            ),
+            None,
+        )
+        if later_delegation is None:
+            continue
+        replans.append(
+            {
+                "type": "replan",
+                "reason": "A failed subagent completion was followed by a new delegation.",
+                "failed_delegation_id": result.get("delegation_id"),
+                "recovery_delegation_id": later_delegation.get("delegation_id"),
+                "__index__": later_delegation.get("__index__", result_index),
+            }
+        )
+    return replans
+
+
+def _native_verification_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    structured = [
+        dict(event)
+        for event in trace
+        if event.get("type") == "verification"
+    ]
+    if structured:
+        return structured
+
+    results = subagent_results(trace)
+    if len(results) < 2:
+        return []
+
+    result_texts = [
+        str(result.get("summary", "")).strip().lower()
+        for result in results
+        if str(result.get("summary", "")).strip()
+    ]
+    if len(set(result_texts)) < 2:
+        return []
+
+    last_result_index = max(int(result.get("__index__", -1)) for result in results)
+    for index, event in enumerate(trace):
+        if index <= last_result_index:
+            continue
+        if event.get("type") == "tool_use":
+            return [
+                {
+                    "type": "verification",
+                    "source": event.get("tool", "tool"),
+                    "reason": "A follow-up tool call ran after conflicting subagent results.",
+                    "__index__": index,
+                }
+            ]
+        if event.get("type") != "message":
+            continue
+        message = event.get("message", {})
+        if message.get("role") != "assistant":
+            continue
+        for item in _message_items(message):
+            if item.get("type") != "toolCall":
+                continue
+            return [
+                {
+                    "type": "verification",
+                    "source": item.get("name", "tool"),
+                    "reason": "A follow-up tool call ran after conflicting subagent results.",
+                    "__index__": index,
+                }
+            ]
+    return []
+
+
+def _sessions_spawn_tool_results(trace: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    indexed: Dict[str, Dict[str, Any]] = {}
+    for event in trace:
+        if event.get("type") != "message":
+            continue
+        message = event.get("message", {})
+        if message.get("role") != "toolResult" or message.get("toolName") != "sessions_spawn":
+            continue
+        tool_call_id = str(message.get("toolCallId", "")).strip()
+        if not tool_call_id:
+            continue
+        details = message.get("details", {})
+        if isinstance(details, dict):
+            indexed[tool_call_id] = details
+    return indexed
+
+
+def _message_items(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    content = message.get("content", [])
+    if isinstance(content, list):
+        return [item for item in content if isinstance(item, dict)]
+    return []
+
+
+def _iter_internal_task_completion_events(event: Dict[str, Any]) -> List[Dict[str, Any]]:
+    parsed: List[Dict[str, Any]] = []
+    for candidate in _internal_events_from_event(event):
+        if candidate.get("type") == "task_completion":
+            parsed.append(candidate)
+    if parsed:
+        return parsed
+
+    text = _event_text_content(event)
+    if not text:
+        return []
+
+    blocks = re.findall(
+        r"\[Internal task completion event\](.*?)(?=\n---\n|\Z)",
+        text,
+        flags=re.DOTALL,
+    )
+    parsed_blocks: List[Dict[str, Any]] = []
+    for block in blocks:
+        result_match = re.search(
+            r"<<<BEGIN_UNTRUSTED_CHILD_RESULT>>>\n(.*?)\n<<<END_UNTRUSTED_CHILD_RESULT>>>",
+            block,
+            flags=re.DOTALL,
+        )
+        parsed_blocks.append(
+            {
+                "type": "task_completion",
+                "childSessionKey": _extract_prefixed_line(block, "session_key:"),
+                "childSessionId": _extract_prefixed_line(block, "session_id:"),
+                "announceType": _extract_prefixed_line(block, "type:"),
+                "taskLabel": _extract_prefixed_line(block, "task:"),
+                "statusLabel": _extract_prefixed_line(block, "status:"),
+                "status": _extract_prefixed_line(block, "status:"),
+                "result": result_match.group(1).strip() if result_match else "",
+            }
+        )
+    return parsed_blocks
+
+
+def _internal_events_from_event(event: Dict[str, Any]) -> List[Dict[str, Any]]:
+    candidates = []
+    message = event.get("message", {})
+    if isinstance(message, dict):
+        candidates.append(message.get("internalEvents"))
+    candidates.append(event.get("internalEvents"))
+
+    parsed: List[Dict[str, Any]] = []
+    for candidate in candidates:
+        if not isinstance(candidate, list):
+            continue
+        for item in candidate:
+            if isinstance(item, dict):
+                parsed.append(item)
+    return parsed
+
+
+def _event_text_content(event: Dict[str, Any]) -> str:
+    if event.get("type") != "message":
+        return ""
+    message = event.get("message", {})
+    content = message.get("content", [])
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: List[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+            continue
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "text" and isinstance(item.get("text"), str):
+            parts.append(item["text"])
+    return "\n".join(part for part in parts if part.strip())
+
+
+def _extract_prefixed_line(block: str, prefix: str) -> str:
+    for line in block.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return ""
+
+
+def _normalize_subagent_status(status: Any, status_label: Any) -> str:
+    raw = str(status or "").strip().lower()
+    label = str(status_label or "").strip().lower()
+    if raw in {"ok", "success"} or "completed successfully" in label:
+        return "success"
+    if raw in {"timeout", "error", "failed"} or "timed out" in label or "failed" in label:
+        return "failed"
+    return raw or "unknown"
+
+
+def _merge_event_lists(
+    primary: List[Dict[str, Any]],
+    secondary: List[Dict[str, Any]],
+    identity_key: str,
+) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for event in [*primary, *secondary]:
+        event_id = str(event.get(identity_key) or jsonlib.dumps(event, sort_keys=True, ensure_ascii=False))
+        if event_id in seen:
+            continue
+        seen.add(event_id)
+        merged.append(event)
+    return merged
+
+
+def _dedupe_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for result in results:
+        key = (
+            str(result.get("delegation_id", "")),
+            str(result.get("status", "")),
+            str(result.get("summary", "")),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(result)
+    return deduped
