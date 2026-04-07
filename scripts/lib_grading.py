@@ -18,7 +18,7 @@ from lib_tasks import Task
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_JUDGE_MODEL = "openrouter/anthropic/claude-opus-4-6"
+DEFAULT_JUDGE_MODEL = "openai-codex/gpt-5.4"
 DEFAULT_JUDGE_AGENT_PREFIX = "bench-judge"
 DEFAULT_JUDGE_TIMEOUT_SECONDS = 180
 
@@ -573,6 +573,17 @@ def _normalize_judge_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
     """
     result: Dict[str, Any] = {"scores": {}, "total": None, "notes": ""}
     
+    meta_keys = {
+        "total",
+        "score",
+        "overall_score",
+        "notes",
+        "justification",
+        "reasoning",
+        "commentary",
+        "summary",
+    }
+
     # Extract scores from various keys
     if "scores" in parsed:
         scores_data = parsed["scores"]
@@ -592,10 +603,31 @@ def _normalize_judge_response(parsed: Dict[str, Any]) -> Dict[str, Any]:
                     result["scores"][key] = value["score"]
                 elif isinstance(value, (int, float)):
                     result["scores"][key] = value
+    else:
+        plain_scores: Dict[str, float] = {}
+        for key, value in parsed.items():
+            if key in meta_keys:
+                continue
+            if isinstance(value, dict) and "score" in value and isinstance(
+                value["score"], (int, float)
+            ):
+                plain_scores[key] = float(value["score"])
+                continue
+            if isinstance(value, (int, float)):
+                plain_scores[key] = float(value)
+        if plain_scores and all(0.0 <= score <= 1.0 for score in plain_scores.values()):
+            result["scores"] = plain_scores
     
     # Extract total score
     if "total" in parsed and parsed["total"] is not None:
-        result["total"] = float(parsed["total"]) if isinstance(parsed["total"], (int, float)) else None
+        total_value = parsed["total"]
+        if isinstance(total_value, (int, float)):
+            result["total"] = float(total_value)
+        elif isinstance(total_value, str):
+            try:
+                result["total"] = float(total_value)
+            except ValueError:
+                result["total"] = None
     elif "score" in parsed and isinstance(parsed["score"], (int, float)):
         result["total"] = float(parsed["score"])
     elif "overall_score" in parsed and isinstance(parsed["overall_score"], (int, float)):
