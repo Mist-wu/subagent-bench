@@ -224,8 +224,8 @@ def _parse_args() -> argparse.Namespace:
         "--judge",
         default=None,
         help=(
-            "Judge model or backend. Default (unset): OpenClaw agent session with "
-            "openrouter/anthropic/claude-opus-4.5. Set to a model ID to call its API "
+            "Judge model override. Default (unset): reuse the benchmark model via an "
+            "OpenClaw agent session. Set to a model ID to call its API "
             "directly (e.g. openai/gpt-4o, anthropic/claude-sonnet-4-5-20250514, claude)"
         ),
     )
@@ -699,6 +699,7 @@ def main():
                     skill_dir=skill_dir,
                     output_dir=Path(args.output_dir) / f"{run_id}_transcripts",
                     verbose=args.verbose,
+                    preferred_workspace=agent_workspace,
                 )
             except Exception as exc:
                 execution_error = str(exc)
@@ -718,7 +719,11 @@ def main():
                 }
             try:
                 grade_kwargs = dict(
-                    task=task, execution_result=result, skill_dir=skill_dir, verbose=args.verbose
+                    task=task,
+                    execution_result=result,
+                    skill_dir=skill_dir,
+                    judge_model=args.model,
+                    verbose=args.verbose,
                 )
                 if args.judge:
                     grade_kwargs["judge_model"] = args.judge

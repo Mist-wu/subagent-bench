@@ -173,15 +173,18 @@ def _get_agent_workspace(agent_id: str) -> Path | None:
         if list_result.returncode != 0:
             return None
 
-        # Parse the agent list output to find workspace
-        # OpenClaw normalizes colons to dashes and lowercases agent names
+        # Parse the agent list output to find an exact agent block.
+        # OpenClaw normalizes colons to dashes and lowercases agent names.
         normalized_id = agent_id.replace(":", "-").lower()
         lines = list_result.stdout.split("\n")
         found_agent = False
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith(f"- {agent_id}") or stripped.startswith(f"- {normalized_id}"):
-                found_agent = True
+            if stripped.startswith("- "):
+                name_part = stripped[2:].split()[0] if stripped[2:].strip() else ""
+                found_agent = name_part.lower() in {agent_id.lower(), normalized_id}
+                if found_agent:
+                    continue
             elif found_agent and "Workspace:" in line:
                 workspace_str = line.split("Workspace:")[1].strip()
                 # Expand ~ if present
@@ -305,6 +308,9 @@ def ensure_agent_exists(
     bench_models = bench_agent_dir / "models.json"
     main_models = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "models.json"
 
+    main_auth_profiles = Path.home() / ".openclaw" / "agents" / "main" / "agent" / "auth-profiles.json"
+    bench_auth_profiles = bench_agent_dir / "auth-profiles.json"
+
     if base_url:
         # Custom OpenAI-compatible endpoint — build a provider entry
         data: dict[str, Any] = {}
@@ -362,6 +368,14 @@ def ensure_agent_exists(
                 logger.warning("Failed to set default model in bench models.json: %s", exc)
         logger.info("Copied main agent models.json to bench agent %s", agent_id)
 
+    if main_auth_profiles.exists():
+        try:
+            import shutil as _shutil
+            _shutil.copy2(main_auth_profiles, bench_auth_profiles)
+            logger.info("Copied main agent auth-profiles.json to bench agent %s", agent_id)
+        except OSError as exc:
+            logger.warning("Failed to copy auth-profiles.json to bench agent %s: %s", agent_id, exc)
+
     # Delete sessions.json so OpenClaw picks up the new defaultProvider/defaultModel
     # instead of reusing a cached session entry that still points to an old model.
     bench_sessions_dir = _get_agent_store_dir(agent_id) / "sessions"
@@ -372,6 +386,8 @@ def ensure_agent_exists(
             logger.info("Deleted stale sessions.json for bench agent %s", agent_id)
         except OSError as exc:
             logger.warning("Failed to delete sessions.json: %s", exc)
+
+    _restart_gateway_if_possible()
 
     return True
 
@@ -400,7 +416,13 @@ def cleanup_agent_sessions(agent_id: str) -> None:
         logger.info("Removed %s old OpenClaw session transcripts for %s", removed, agent_id)
 
 
-def prepare_task_workspace(skill_dir: Path, run_id: str, task: Task, agent_id: str) -> Path:
+def prepare_task_workspace(
+    skill_dir: Path,
+    run_id: str,
+    task: Task,
+    agent_id: str,
+    preferred_workspace: Path | None = None,
+) -> Path:
     """
     Prepare workspace for a task by copying fixtures.
     Uses the agent's configured workspace to ensure files are in the right place.
@@ -408,7 +430,7 @@ def prepare_task_workspace(skill_dir: Path, run_id: str, task: Task, agent_id: s
     import shutil
 
     # Get agent's workspace from agent config
-    workspace = _get_agent_workspace(agent_id)
+    workspace = preferred_workspace or _get_agent_workspace(agent_id)
     if workspace is None:
         # Fallback to task-specific workspace if agent workspace not found
         logger.warning("Could not find agent workspace, using fallback")
@@ -787,6 +809,10 @@ def _extract_usage_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str
     return totals
 
 
+def _is_session_lock_error(stderr: str) -> bool:
+    return "session file locked" in (stderr or "").lower()
+
+
 def execute_openclaw_task(
     *,
     task: Task,
@@ -797,6 +823,7 @@ def execute_openclaw_task(
     skill_dir: Path,
     output_dir: Optional[Path] = None,
     verbose: bool = False,
+    preferred_workspace: Optional[Path] = None,
 ) -> Dict[str, Any]:
     logger.info("🤖 Agent [%s] starting task: %s", agent_id, task.task_id)
     logger.info("   Task: %s", task.name)
@@ -811,7 +838,13 @@ def execute_openclaw_task(
     cleanup_agent_sessions(agent_id)
 
     start_time = time.time()
-    workspace = prepare_task_workspace(skill_dir, run_id, task, agent_id)
+    workspace = prepare_task_workspace(
+        skill_dir,
+        run_id,
+        task,
+        agent_id,
+        preferred_workspace=preferred_workspace,
+    )
     session_id = f"{task.task_id}_{int(time.time() * 1000)}"
     timeout_seconds = task.timeout_seconds * timeout_multiplier
     stdout = ""
@@ -874,34 +907,48 @@ def execute_openclaw_task(
                 break
     else:
         # Single-session task: send task.prompt once
-        try:
-            result = subprocess.run(
-                [
-                    "openclaw",
-                    "agent",
-                    "--agent",
-                    agent_id,
-                    "--session-id",
-                    session_id,
-                    "--message",
-                    task.prompt,
-                ],
-                capture_output=True,
-                text=True,
-                cwd=str(workspace),
-                timeout=timeout_seconds,
-                check=False,
-            shell=USE_SHELL,
-            )
-            stdout = result.stdout
-            stderr = result.stderr
-            exit_code = result.returncode
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            stdout = _coerce_subprocess_output(exc.stdout)
-            stderr = _coerce_subprocess_output(exc.stderr)
-        except FileNotFoundError as exc:
-            stderr = f"openclaw command not found: {exc}"
+        for attempt in range(2):
+            attempt_session_id = f"{session_id}_{attempt + 1}"
+            try:
+                result = subprocess.run(
+                    [
+                        "openclaw",
+                        "agent",
+                        "--agent",
+                        agent_id,
+                        "--session-id",
+                        attempt_session_id,
+                        "--message",
+                        task.prompt,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(workspace),
+                    timeout=timeout_seconds,
+                    check=False,
+                    shell=USE_SHELL,
+                )
+                stdout = result.stdout
+                stderr = result.stderr
+                exit_code = result.returncode
+                session_id = attempt_session_id
+                if exit_code in (0, -1) or not _is_session_lock_error(stderr) or attempt == 1:
+                    break
+                logger.warning(
+                    "Session lock detected for %s on attempt %s, retrying once",
+                    task.task_id,
+                    attempt + 1,
+                )
+                cleanup_agent_sessions(agent_id)
+                time.sleep(2.0)
+            except subprocess.TimeoutExpired as exc:
+                timed_out = True
+                stdout = _coerce_subprocess_output(exc.stdout)
+                stderr = _coerce_subprocess_output(exc.stderr)
+                break
+            except FileNotFoundError as exc:
+                stderr = f"openclaw command not found: {exc}"
+                break
 
     transcript, transcript_path = _load_transcript(agent_id, session_id, start_time)
     if transcript and _transcript_has_async_handoff(transcript):
@@ -931,7 +978,11 @@ def execute_openclaw_task(
         status = "timeout"
     if not transcript:
         status = "error"
-    if exit_code not in (0, -1) and not timed_out:
+    if (
+        exit_code not in (0, -1)
+        and not timed_out
+        and (not transcript or not _is_session_lock_error(stderr))
+    ):
         status = "error"
     if stderr and "openclaw command not found" in str(stderr):
         status = "error"
@@ -985,6 +1036,24 @@ def execute_openclaw_task(
         "stdout": stdout,
         "stderr": stderr,
     }
+
+
+def _restart_gateway_if_possible() -> None:
+    try:
+        result = subprocess.run(
+            ["openclaw", "gateway", "restart"],
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=USE_SHELL,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            logger.info("Restarted OpenClaw gateway to refresh agent configuration")
+        else:
+            logger.warning("Gateway restart returned %s: %s", result.returncode, result.stderr[:300])
+    except Exception as exc:
+        logger.warning("Failed to restart OpenClaw gateway: %s", exc)
 
 
 def run_openclaw_prompt(
