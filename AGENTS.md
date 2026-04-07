@@ -1,60 +1,71 @@
 # AGENTS.md
 
-This file provides context for AI agents working in this repository.
+Context for agents working in this repository.
 
-## What this project is
+## Project
 
-subagent-bench is a benchmark for evaluating multi-agent AI systems. It scores two separate capabilities:
+subagent-bench evaluates multi-agent systems on two targets:
 
-- **C6a (Orchestration)**: How well a main agent decomposes tasks, delegates to subagents, writes delegation specs, handles failures, and integrates results.
-- **C6b (Execution)**: How well subagents understand instructions, use tools, produce correct outputs, and handle errors.
+- **C6a (Orchestration)**: task decomposition, delegation, replanning, integration.
+- **C6b (Execution)**: subagent tool use, correctness, and completion quality.
+
+It borrows the `Markdown + YAML frontmatter` task format from PinchBench, but extends it to score orchestration traces explicitly instead of only end-to-end outputs.
 
 ## Architecture
 
-There are two evaluation paths:
+- **Offline**: `src/subagent_bench/` grades recorded JSON traces. CLI entry: `src/subagent_bench/cli.py`.
+- **Live**: `scripts/` runs real agents, collects transcripts, and grades them. Entry: `scripts/benchmark.py`.
 
-1. **Offline** (`src/subagent_bench/`): Grades pre-recorded JSON traces against task definitions. Entry point is the `subagent-bench` CLI (`src/subagent_bench/cli.py`).
-2. **Live** (`scripts/`): Executes real agents via OpenClaw, collects transcripts, grades them. Entry point is `scripts/benchmark.py`.
-
-Both paths share the same task definitions in `tasks/`.
+Both paths use the shared task definitions in `tasks/`.
 
 ## Key directories
 
-- `tasks/` -- Benchmark task definitions. Each is a Markdown file with YAML frontmatter, a prompt, expected behavior, grading criteria, and embedded Python grading code.
-- `src/subagent_bench/` -- Core library: task loading (`task_loader.py`), trace schema validation (`schema.py`), grading engine (`grading.py`), orchestration checks (`orchestration_checks.py`), CLI (`cli.py`), runner (`runner.py`).
-- `scripts/` -- Live benchmark: agent lifecycle (`lib_agent.py`), grading (`lib_grading.py`), task loading (`lib_tasks.py`), main runner (`benchmark.py`).
-- `examples/traces/` -- Golden trace files (one JSON per task).
-- `examples/workspaces/` -- Golden workspace outputs (artifacts produced by each task).
-- `tests/` -- Pytest regression tests.
+- `tasks/`: benchmark tasks.
+- `src/subagent_bench/`: loader, schema, grading, orchestration checks, CLI, runner.
+- `scripts/`: live benchmark runner and helpers.
+- `examples/traces/`: golden traces.
+- `examples/workspaces/`: golden artifacts.
+- `tests/`: regression tests.
 
 ## Task format
 
-Each task file (`tasks/task_*.md`) contains:
+Each `tasks/task_*.md` file contains:
 
-- YAML frontmatter: `id`, `category` (orchestration/execution), `benchmark_target` (C6a/C6b), `task_type`, `dimensions`, `grading_type`, `timeout_seconds`, `workspace_files`.
-- `## Prompt` -- Instruction given to the agent.
-- `## Expected Behavior` -- Ideal behavior description.
-- `## Grading Criteria` -- Pass/fail checklist.
-- `## Automated Checks` -- Python `grade(trace, workspace_path)` function returning a score dict.
-- `## LLM Judge Rubric` -- Rubric for LLM-based evaluation (optional).
+- YAML frontmatter: `id`, `category`, `benchmark_target`, `task_type`, `dimensions`, `grading_type`, `timeout_seconds`, `workspace_files`
+- `## Prompt`
+- `## Expected Behavior`
+- `## Grading Criteria`
+- `## Automated Checks`
+- `## LLM Judge Rubric` (optional)
 
 See `tasks/TASK_TEMPLATE.md` for the full template.
 
 ## Grading system
 
-- **automated**: Deterministic Python checks (`exec`'d from each task's `## Automated Checks`).
-- **llm_judge**: LLM evaluates transcript against rubric criteria.
-- **hybrid**: Weighted combination of both.
+- `automated`: deterministic Python checks
+- `llm_judge`: rubric-based LLM scoring
+- `hybrid`: weighted combination
 
-Scores are attributed to failure categories: delegation failure, execution failure, or integration failure.
+Attribute failures to delegation, execution, or integration when possible.
 
 ## Trace format
 
-Traces are JSON with an `events` array. Key event types: `delegate`, `subagent_result`, `replan`, `verification`, `tool_use`, `tool_result`, `assistant_message`, `artifact_written`.
+Traces are JSON with an `events` array. Important event types:
+
+- `delegate`
+- `subagent_result`
+- `replan`
+- `verification`
+- `tool_use`
+- `tool_result`
+- `assistant_message`
+- `artifact_written`
+
+Prefer explicit intermediate events over inferring behavior only from final outputs.
 
 ## Conventions
 
 - Python 3.11+, dependencies managed via `pyproject.toml`.
-- Tasks use the PinchBench-style Markdown + YAML frontmatter format.
+- Tasks follow the PinchBench-style Markdown task format.
 - Tests run with `pytest`.
 - Live benchmark uses `uv run` (see `scripts/run.sh`).
