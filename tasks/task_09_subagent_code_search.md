@@ -5,9 +5,12 @@ category: execution
 benchmark_target: C6b
 task_type: execution_search
 dimensions: ["intent_understanding", "tool_use_correctness", "completion_rate", "result_fidelity"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 180
 workspace_files: []
+grading_weights:
+  automated: 0.7
+  llm_judge: 0.3
 ---
 
 ## Prompt
@@ -47,3 +50,15 @@ def grade(trace: list, workspace_path: str) -> dict:
         "intent_understanding": 1.0 if artifact_exists and fidelity else 0.0,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Analysis Quality
+**Score 1.0**: The report is precise, correctly scoped, and useful for remediation.
+**Score 0.5**: The report is partly useful but thin or somewhat imprecise.
+**Score 0.0**: The report is low-quality or not useful.
+
+### Criterion 2: Execution Quality
+**Score 1.0**: The subagent executes independently and cleanly with no unnecessary wandering.
+**Score 0.5**: Execution is adequate but inefficient or shaky.
+**Score 0.0**: Execution quality is poor.

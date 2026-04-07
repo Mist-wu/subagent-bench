@@ -49,5 +49,14 @@
       "type": "artifact_written",
       "path": "reports/launch_plan.md"
     }
-  ]
+  ],
+  "judge_result": {
+    "score": 1.0,
+    "breakdown": {
+      "split_quality": 1.0,
+      "delegation_clarity": 1.0,
+      "integration_reliability": 1.0
+    },
+    "notes": "Decomposition is complete and the launch plan integrates all slices."
+  }
 }

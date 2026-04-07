@@ -75,6 +75,64 @@
 
 `cost / latency` 仍依赖接入真实 runtime trace。
 
+## 六、评分方式
+
+### C6a 用 hybrid
+
+自动检查：
+
+- 是否 spawn
+- spawn 数量
+- delegation spec 字段是否齐全
+- 是否按预期依赖执行
+- 是否产生重复子任务
+- 是否触发 replan
+
+LLM Judge：
+
+- 拆分是否合理
+- 委托说明是否清晰
+- 结果整合是否可靠
+
+### C6b 用 hybrid / automated
+
+自动检查：
+
+- 文件存在性
+- 内容完整性
+- 精确匹配路径 / 数字 / 函数名 / 行号
+- 工具调用正确性
+- 输出格式正确性
+
+LLM Judge：
+
+- 分析质量
+
+当前仓库实现上：
+
+- `C6a` 任务默认使用 `hybrid`
+- `C6b` 任务使用 `hybrid / automated` 混合配置
+- judge 结果通过 trace 中的 `judge_result` 字段注入
+
+## 七、错误归因规则
+
+失败必须拆成三类：
+
+- `Delegation Failure`
+- `Execution Failure`
+- `Integration Failure`
+
+当前仓库已经把这三类错误归因内置到评分结果里：
+
+- `C6a` 中与拆分、派发、spec、replan 相关的失败归为 `Delegation Failure`
+- `C6b` 中与工具使用、结果保真、异常处理相关的失败归为 `Execution Failure`
+- 与整合、验证、最终裁决相关的失败归为 `Integration Failure`
+
+这些归因会进入结果 JSON 的：
+
+- 单任务 `failure_attribution`
+- 汇总级 `failure_attribution_counts`
+
 ## 五、任务类型
 
 - `T1` 是否委托

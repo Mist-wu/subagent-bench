@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T2
 dimensions: ["task_decomposition_quality", "delegation_decision_accuracy"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 180
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -54,3 +57,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "consistent_scope": consistent_scope,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The main agent avoids redundant subtask duplication and keeps scope compact.
+**Score 0.5**: There is some redundancy but not enough to derail the task.
+**Score 0.0**: Decomposition is clearly wasteful or overlapping.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The chosen delegation, if any, is focused and well-scoped.
+**Score 0.5**: The delegation is somewhat focused but still loose.
+**Score 0.0**: The delegation is confusing or excessively broad.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final artifact remains coherent despite the compact delegation plan.
+**Score 0.5**: The artifact is usable but not strongly synthesized.
+**Score 0.0**: The final artifact is inconsistent or unreliable.

@@ -34,6 +34,7 @@ class GradeResult:
     score: float
     breakdown: Dict[str, Any]
     notes: str = ""
+    failure_attribution: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -43,6 +44,7 @@ class GradeResult:
             "score": self.score,
             "breakdown": self.breakdown,
             "notes": self.notes,
+            "failure_attribution": self.failure_attribution,
         }
 
 
@@ -96,6 +98,7 @@ class BenchmarkRun:
                 "under_delegation_rate": self._inverse_average("delegates_when_needed"),
                 "execution_normalized_delegation_score": self._average_for_task_type("T5"),
             },
+            "failure_attribution_counts": self._failure_attribution_counts(),
             "results": [result.to_dict() for result in self.results],
         }
 
@@ -124,3 +127,14 @@ class BenchmarkRun:
             return 0.0
         count = sum(1 for result in self.results if predicate(result))
         return count / len(self.results)
+
+    def _failure_attribution_counts(self) -> Dict[str, int]:
+        counts = {
+            "Delegation Failure": 0,
+            "Execution Failure": 0,
+            "Integration Failure": 0,
+        }
+        for result in self.results:
+            for label in result.failure_attribution:
+                counts[label] = counts.get(label, 0) + 1
+        return counts

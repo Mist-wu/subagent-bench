@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T6
 dimensions: ["recovery_replan_quality", "delegation_spec_completeness", "integration_quality"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 240
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -48,3 +51,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "final_output_with_recovery_note": risk_register,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The recovery plan correctly reframes the delegated work after failure.
+**Score 0.5**: Recovery exists but the revised task is only partly well-scoped.
+**Score 0.0**: No meaningful recovery plan appears.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The retry delegation adds the missing context and clarifies expectations.
+**Score 0.5**: The retry is partially clearer but still underspecified.
+**Score 0.0**: The retry leaves the original ambiguity unresolved.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final output reflects the recovery path and remains reliable.
+**Score 0.5**: The output exists but recovery handling is only partly reflected.
+**Score 0.0**: The final output does not reliably incorporate the recovery.

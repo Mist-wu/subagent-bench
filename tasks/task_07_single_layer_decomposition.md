@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T2
 dimensions: ["task_decomposition_quality", "assignment_accuracy", "delegation_spec_completeness"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 240
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -51,3 +54,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "decomposition_integration": integrated,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The decomposition covers the problem with 2-4 sensible, non-overlapping subtasks.
+**Score 0.5**: The decomposition is partly sensible but has gaps or redundancy.
+**Score 0.0**: The decomposition is poor or incoherent.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: Each delegation clearly defines ownership, inputs, and expected output.
+**Score 0.5**: Delegations are understandable but not fully specified.
+**Score 0.0**: Delegations are vague or confusing.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final launch plan accurately integrates all slices.
+**Score 0.5**: Integration is partial or weak.
+**Score 0.0**: The final plan does not reliably combine the delegated work.

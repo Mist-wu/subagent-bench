@@ -19,27 +19,30 @@ def grade_task(task: Task, trace_path: Path, workspace_path: Path) -> GradeResul
 
     judge_result = trace_bundle.get("judge_result")
     if task.grading_type in {"llm_judge", "hybrid"} and not judge_result:
-        return GradeResult(
+        return _attach_failure_attribution(
+            GradeResult(
             task_id=task.task_id,
             task_name=task.name,
             grading_type=task.grading_type,
             score=automated_result.score if task.grading_type == "hybrid" else 0.0,
             breakdown=automated_result.breakdown if task.grading_type == "hybrid" else {},
             notes="Missing judge_result payload in trace.",
-        )
-
-    if task.grading_type == "llm_judge":
-        return _attach_task_metadata(
-            GradeResult(
-            task_id=task.task_id,
-            task_name=task.name,
-            grading_type="llm_judge",
-            score=float(judge_result.get("score", 0.0)),
-            breakdown={key: float(value) for key, value in judge_result.get("breakdown", {}).items()},
-            notes=str(judge_result.get("notes", "")),
             ),
             task,
         )
+
+    if task.grading_type == "llm_judge":
+        return _attach_failure_attribution(_attach_task_metadata(
+            GradeResult(
+                task_id=task.task_id,
+                task_name=task.name,
+                grading_type="llm_judge",
+                score=float(judge_result.get("score", 0.0)),
+                breakdown={key: float(value) for key, value in judge_result.get("breakdown", {}).items()},
+                notes=str(judge_result.get("notes", "")),
+            ),
+            task,
+        ), task)
 
     weights = task.grading_weights or {"automated": 0.5, "llm_judge": 0.5}
     auto_weight = float(weights.get("automated", 0.5))
@@ -49,17 +52,17 @@ def grade_task(task: Task, trace_path: Path, workspace_path: Path) -> GradeResul
     combined = ((automated_result.score * auto_weight) + (judge_score * judge_weight)) / total_weight
     breakdown = dict(automated_result.breakdown)
     breakdown.update({f"llm_judge.{key}": float(value) for key, value in judge_result.get("breakdown", {}).items()})
-    return _attach_task_metadata(
+    return _attach_failure_attribution(_attach_task_metadata(
         GradeResult(
-        task_id=task.task_id,
-        task_name=task.name,
-        grading_type="hybrid",
-        score=combined,
-        breakdown=breakdown,
-        notes=str(judge_result.get("notes", "")),
+            task_id=task.task_id,
+            task_name=task.name,
+            grading_type="hybrid",
+            score=combined,
+            breakdown=breakdown,
+            notes=str(judge_result.get("notes", "")),
         ),
         task,
-    )
+    ), task)
 
 
 def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResult:
@@ -88,16 +91,16 @@ def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResu
     normalized["__category__"] = task.category
     normalized["__dimensions__"] = list(task.dimensions)
     score = _strip_metadata_from_average(normalized)
-    return _attach_task_metadata(
+    return _attach_failure_attribution(_attach_task_metadata(
         GradeResult(
-        task_id=task.task_id,
-        task_name=task.name,
-        grading_type="automated",
-        score=score,
-        breakdown=normalized,
+            task_id=task.task_id,
+            task_name=task.name,
+            grading_type="automated",
+            score=score,
+            breakdown=normalized,
         ),
         task,
-    )
+    ), task)
 
 
 def _extract_python_code(section: str) -> str:
@@ -122,3 +125,98 @@ def _attach_task_metadata(result: GradeResult, task: Task) -> GradeResult:
     result.breakdown["__task_type__"] = task.task_type
     result.breakdown["__dimensions__"] = list(task.dimensions)
     return result
+
+
+def _attach_failure_attribution(result: GradeResult, task: Task) -> GradeResult:
+    result.failure_attribution = infer_failure_attribution(task, result.breakdown)
+    return result
+
+
+def infer_failure_attribution(task: Task, breakdown: Dict[str, Any]) -> list[str]:
+    labels: list[str] = []
+    if task.benchmark_target == "C6b":
+        if _has_failed_keys(
+            breakdown,
+            {
+                "intent_understanding",
+                "tool_use_correctness",
+                "completion_rate",
+                "output_format_compliance",
+                "timeout_error_handling",
+                "result_fidelity",
+            },
+            prefixes={"llm_judge.analysis_quality", "llm_judge.execution_quality"},
+        ):
+            labels.append("Execution Failure")
+        return labels
+
+    if _has_failed_keys(
+        breakdown,
+        {
+            "delegates_when_needed",
+            "avoids_over_delegation",
+            "delegation_spec_completeness",
+            "dependency_correctness",
+            "task_decomposition_quality",
+            "assignment_accuracy",
+            "recovery_replan_quality",
+            "decomposition_count_in_range",
+            "distinct_decomposition_scopes",
+            "expected_dependency_delegations",
+            "downstream_consumes_upstream_output",
+            "parallel_delegations",
+            "non_overlapping_outputs",
+            "waits_for_both_results",
+            "single_delegation",
+            "complete_spec",
+            "output_format_specified",
+            "no_overlapping_delegations",
+            "minimal_delegation_count",
+            "failure_detected",
+            "replan_or_retry",
+            "later_success",
+        },
+        prefixes={"llm_judge.split_quality", "llm_judge.delegation_clarity"},
+    ):
+        labels.append("Delegation Failure")
+
+    if _has_failed_keys(
+        breakdown,
+        {
+            "integration_quality",
+            "source_of_truth_cited",
+            "decision_after_verification",
+            "verification_recorded",
+            "merged_brief",
+            "decomposition_integration",
+            "dependency_aware_final_plan",
+            "final_output_with_recovery_note",
+            "artifact_produced",
+            "artifact_exists",
+            "consistent_scope",
+            "delegated_artifact_exists",
+            "conflicting_results_detected",
+        },
+        prefixes={"llm_judge.integration_reliability"},
+    ):
+        labels.append("Integration Failure")
+
+    return labels
+
+
+def _has_failed_keys(breakdown: Dict[str, Any], keys: set[str], prefixes: set[str]) -> bool:
+    for key, value in breakdown.items():
+        if key.startswith("__"):
+            continue
+        if key in keys and _is_failed_score(value):
+            return True
+        if key in prefixes and _is_failed_score(value):
+            return True
+    return False
+
+
+def _is_failed_score(value: Any) -> bool:
+    try:
+        return float(value) < 0.999
+    except (TypeError, ValueError):
+        return False

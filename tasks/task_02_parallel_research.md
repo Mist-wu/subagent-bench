@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T4
 dimensions: ["dependency_correctness", "task_decomposition_quality", "integration_quality"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 240
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -58,3 +61,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "merged_brief": merged,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The task is split into two clean, parallelizable streams with no redundant overlap.
+**Score 0.5**: Parallelization is partly correct but leaves overlap or weak boundaries.
+**Score 0.0**: The split is confused or not meaningfully parallel.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: Each delegation clearly scopes the frontend/backend stream and expected output.
+**Score 0.5**: Delegations are somewhat understandable but underspecified.
+**Score 0.0**: Delegations are unclear or ambiguous.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final brief reliably combines both streams into one coherent launch view.
+**Score 0.5**: Integration is incomplete or weakly synthesized.
+**Score 0.0**: Results are merged unreliably or not merged.

@@ -34,5 +34,14 @@
       "type": "artifact_written",
       "path": "reports/dependency_plan.md"
     }
-  ]
+  ],
+  "judge_result": {
+    "score": 1.0,
+    "breakdown": {
+      "split_quality": 1.0,
+      "delegation_clarity": 1.0,
+      "integration_reliability": 1.0
+    },
+    "notes": "Dependency ordering is explicit and preserved in the final plan."
+  }
 }

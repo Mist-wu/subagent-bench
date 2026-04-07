@@ -19,5 +19,14 @@
       "type": "artifact_written",
       "path": "reports/backend_migration_findings.md"
     }
-  ]
+  ],
+  "judge_result": {
+    "score": 1.0,
+    "breakdown": {
+      "split_quality": 1.0,
+      "delegation_clarity": 1.0,
+      "integration_reliability": 1.0
+    },
+    "notes": "Delegation stays compact and non-redundant."
+  }
 }

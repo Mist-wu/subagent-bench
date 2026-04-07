@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T7
 dimensions: ["recovery_replan_quality", "integration_quality", "result_verification_quality"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 240
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -57,3 +60,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "source_of_truth_cited": cited_source,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The main agent handles the conflicting delegated outputs in a disciplined way.
+**Score 0.5**: Conflict handling exists but is somewhat ad hoc.
+**Score 0.0**: The conflict is ignored or mishandled.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The delegated asks are clear enough that the conflict is interpretable rather than accidental noise.
+**Score 0.5**: Delegations are only partly interpretable.
+**Score 0.0**: Delegations are too unclear to support meaningful comparison.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final decision is grounded in verification and integrates evidence reliably.
+**Score 0.5**: The final decision gestures at verification but remains somewhat shaky.
+**Score 0.0**: The final integration is unreliable.

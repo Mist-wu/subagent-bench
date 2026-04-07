@@ -20,3 +20,5 @@ def test_example_suite_scores_perfectly() -> None:
     assert payload["task_type_scores"]["T7"] == 1.0
     assert payload["dimension_scores"]["result_verification_quality"] == 1.0
     assert payload["system_metrics"]["end_to_end_task_success"] == 1.0
+    assert payload["failure_attribution_counts"]["Delegation Failure"] == 0
+    assert payload["failure_attribution_counts"]["Execution Failure"] == 0

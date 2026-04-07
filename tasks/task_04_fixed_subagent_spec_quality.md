@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T5
 dimensions: ["delegation_spec_completeness", "assignment_accuracy"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 180
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -51,3 +54,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "artifact_produced": produced,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The main agent delegates exactly the right slice to the fixed subagent.
+**Score 0.5**: Delegation is broadly appropriate but somewhat mis-scoped.
+**Score 0.0**: The chosen delegated slice is clearly wrong.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The spec is crisp, complete, and actionable without follow-up questions.
+**Score 0.5**: The spec is understandable but missing important details.
+**Score 0.0**: The spec is too vague to execute reliably.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The delegated artifact matches the expected contract implied by the spec.
+**Score 0.5**: The artifact is usable but contract expectations are only partly met.
+**Score 0.0**: The delegated result is not reliable enough to integrate.

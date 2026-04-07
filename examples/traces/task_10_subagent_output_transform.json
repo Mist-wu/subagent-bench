@@ -9,5 +9,13 @@
       "type": "artifact_written",
       "path": "data/employees.json"
     }
-  ]
+  ],
+  "judge_result": {
+    "score": 1.0,
+    "breakdown": {
+      "analysis_quality": 1.0,
+      "execution_quality": 1.0
+    },
+    "notes": "Transformation is faithful and well-structured."
+  }
 }

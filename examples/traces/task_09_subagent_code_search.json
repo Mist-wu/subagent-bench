@@ -14,5 +14,13 @@
       "type": "artifact_written",
       "path": "reports/raw_query_report.md"
     }
-  ]
+  ],
+  "judge_result": {
+    "score": 1.0,
+    "breakdown": {
+      "analysis_quality": 1.0,
+      "execution_quality": 1.0
+    },
+    "notes": "Report is precise and execution is efficient."
+  }
 }

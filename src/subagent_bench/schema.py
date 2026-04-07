@@ -39,6 +39,8 @@ def validate_trace_bundle(bundle: Dict[str, Any]) -> List[str]:
             errors.append("judge_result must be an object when present.")
         elif "score" not in judge_result:
             errors.append("judge_result must contain 'score'.")
+        elif "breakdown" in judge_result and not isinstance(judge_result["breakdown"], dict):
+            errors.append("judge_result.breakdown must be an object when present.")
 
     return errors
 

@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T1
 dimensions: ["delegation_decision_accuracy", "delegation_spec_completeness", "integration_quality"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 180
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -54,3 +57,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "integration_quality": integrated,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: Delegates only the expensive slice and keeps trivial work local.
+**Score 0.5**: Delegation choice is partly reasonable but includes avoidable delegation or misses useful delegation.
+**Score 0.0**: Delegation policy is clearly wrong for the task.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The delegated instruction is clear, scoped, and contains the context needed to act independently.
+**Score 0.5**: The instruction is understandable but underspecified.
+**Score 0.0**: The delegation is vague or missing critical information.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: Final answer accurately integrates the delegated result and keeps the main-thread work coherent.
+**Score 0.5**: Integration is partial or somewhat unreliable.
+**Score 0.0**: Integration is missing or misleading.

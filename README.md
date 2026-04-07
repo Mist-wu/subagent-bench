@@ -116,12 +116,14 @@ pytest
 - 校验 trace schema
 - 输出任务级、benchmark target 级、task type 级、dimension 级汇总
 - 输出系统级指标：`end_to_end_task_success`、`over_delegation_rate`、`under_delegation_rate`、`execution_normalized_delegation_score`
+- 输出错误归因：`Delegation Failure`、`Execution Failure`、`Integration Failure`
 - 支持后续接入 `judge_result`
 
 ## 文档
 
 - [PinchBench 分析](docs/pinchbench-analysis.md)
 - [Benchmark 设计](docs/benchmark-design.md)
+- 每个 `hybrid` task 都支持通过 trace 中的 `judge_result` 注入 LLM Judge 评分
 
 ## 下一步建议
 

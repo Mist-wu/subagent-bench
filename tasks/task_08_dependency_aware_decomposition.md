@@ -5,9 +5,12 @@ category: orchestration
 benchmark_target: C6a
 task_type: T3
 dimensions: ["dependency_correctness", "task_decomposition_quality", "recovery_replan_quality"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 240
 workspace_files: []
+grading_weights:
+  automated: 0.6
+  llm_judge: 0.4
 ---
 
 ## Prompt
@@ -55,3 +58,20 @@ def grade(trace: list, workspace_path: str) -> dict:
         "dependency_aware_final_plan": final_plan,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Split Quality
+**Score 1.0**: The decomposition captures the upstream/downstream dependency cleanly.
+**Score 0.5**: The dependency is partly recognized but not strongly represented.
+**Score 0.0**: The split ignores or mishandles dependency structure.
+
+### Criterion 2: Delegation Clarity
+**Score 1.0**: The downstream task clearly states that it depends on upstream output.
+**Score 0.5**: Dependency is implied but not explicit enough.
+**Score 0.0**: Dependency information is absent or unclear.
+
+### Criterion 3: Integration Reliability
+**Score 1.0**: The final dependency plan reflects the ordered execution reliably.
+**Score 0.5**: The final plan is only partly dependency-aware.
+**Score 0.0**: The final plan is unreliable or inconsistent with the dependency.

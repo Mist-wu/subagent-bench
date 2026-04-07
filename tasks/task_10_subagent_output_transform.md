@@ -5,9 +5,12 @@ category: execution
 benchmark_target: C6b
 task_type: execution_transform
 dimensions: ["intent_understanding", "output_format_compliance", "completion_rate", "result_fidelity"]
-grading_type: automated
+grading_type: hybrid
 timeout_seconds: 180
 workspace_files: []
+grading_weights:
+  automated: 0.7
+  llm_judge: 0.3
 ---
 
 ## Prompt
@@ -63,3 +66,15 @@ def grade(trace: list, workspace_path: str) -> dict:
         "intent_understanding": 1.0 if output_format and fidelity else 0.0,
     }
 ```
+
+## LLM Judge Rubric
+
+### Criterion 1: Analysis Quality
+**Score 1.0**: The transformed output is well-structured and faithful to the delegated intent.
+**Score 0.5**: The output is usable but somewhat awkward or incomplete.
+**Score 0.0**: The output quality is poor.
+
+### Criterion 2: Execution Quality
+**Score 1.0**: The subagent completes the transformation cleanly and independently.
+**Score 0.5**: The transformation completes with minor execution weaknesses.
+**Score 0.0**: Execution is poor or unreliable.
