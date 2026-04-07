@@ -37,8 +37,14 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import transcript_has_tool_call, transcript_has_tool_result_error
 
-    saw_failure = 1.0 if transcript_has_tool_result_error(trace, "read", "primary_source.txt") else 0.0
-    fallback = 1.0 if transcript_has_tool_call(trace, "read", "fallback_source.txt") else 0.0
+    saw_failure = 1.0 if (
+        transcript_has_tool_result_error(trace, "read", "primary_source.txt")
+        or transcript_has_tool_result_error(trace, "read_primary")
+    ) else 0.0
+    fallback = 1.0 if (
+        transcript_has_tool_call(trace, "read", "fallback_source.txt")
+        or transcript_has_tool_call(trace, "read_fallback")
+    ) else 0.0
 
     artifact = Path(workspace_path) / "reports/recovered_summary.md"
     completion = 1.0 if artifact.exists() else 0.0

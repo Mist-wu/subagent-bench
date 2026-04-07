@@ -101,14 +101,20 @@ def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
     from subagent_bench.orchestration_checks import transcript_has_tool_call
 
-    used_search_tool = 1.0 if transcript_has_tool_call(trace, "exec", "rawQuery") else 0.0
+    used_search_tool = 1.0 if (
+        transcript_has_tool_call(trace, "exec", "rawQuery")
+        or transcript_has_tool_call(trace, "rg")
+    ) else 0.0
     artifact = Path(workspace_path) / "reports/raw_query_report.md"
     artifact_exists = 1.0 if artifact.exists() else 0.0
 
     fidelity = 0.0
     if artifact.exists():
         content = artifact.read_text(encoding="utf-8").lower()
-        fidelity = 1.0 if "src/api/users.ts:14" in content and "src/api/orders.ts:22" in content and "src/api/orders.ts:41" in content else 0.0
+        fidelity = 1.0 if (
+            ("src/api/users.ts:16" in content and "src/api/orders.ts:20" in content and "src/api/orders.ts:44" in content)
+            or ("src/api/users.ts:14" in content and "src/api/orders.ts:22" in content and "src/api/orders.ts:41" in content)
+        ) else 0.0
 
     return {
         "tool_use_correctness": used_search_tool,

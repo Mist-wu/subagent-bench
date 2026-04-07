@@ -111,10 +111,17 @@ def grade(trace: list, workspace_path: str) -> dict:
     only_one = 1.0 if len(delegations) == 1 else 0.0
     complete_spec = 1.0 if delegations and delegation_fields_present(delegations[0]) else 0.0
     delegated_artifact = 1.0 if artifact_exists(workspace_path, "reports/dependency_audit.md") else 0.0
-    integrated = 1.0 if artifact_contains(
-        workspace_path,
-        "answer.md",
-        ["dependency audit", "reports/dependency_audit.md", "release notes"],
+    integrated = 1.0 if (
+        artifact_contains(
+            workspace_path,
+            "answer.md",
+            ["dependency audit", "reports/dependency_audit.md", "release notes"],
+        )
+        or artifact_contains(
+            workspace_path,
+            "answer.md",
+            ["dependency audit", "reports/dependency_audit.md", "rename handled directly"],
+        )
     ) else 0.0
 
     return {
