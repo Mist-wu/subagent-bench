@@ -17,6 +17,8 @@ grading_weights:
 
 Audit a risky migration plan. The first delegated search fails because the subagent lacks enough context. The main agent should notice the failure, replan, send a corrected delegation, and still finish the final risk register.
 
+For benchmark observability, also write `delegation_trace.json` in the workspace root capturing `delegations`, `subagent_results`, `replans`, and `verifications`.
+
 ## Expected Behavior
 
 The main agent should not stop at the first subagent failure. It should either add missing context and redelegate, or fall back to a direct path, then produce a usable `reports/risk_register.md`. The recovery path should be visible in the trace.
@@ -34,9 +36,9 @@ The main agent should not stop at the first subagent failure. It should either a
 def grade(trace: list, workspace_path: str) -> dict:
     from subagent_bench.orchestration_checks import artifact_contains, artifact_exists, replan_events, subagent_results
 
-    results = subagent_results(trace)
+    results = subagent_results(trace, workspace_path)
     saw_failure = 1.0 if any(event.get("status") == "failed" for event in results) else 0.0
-    replanned = 1.0 if replan_events(trace) else 0.0
+    replanned = 1.0 if replan_events(trace, workspace_path) else 0.0
     recovered = 1.0 if any(event.get("status") == "success" for event in results[1:]) else 0.0
     risk_register = 1.0 if artifact_exists(workspace_path, "reports/risk_register.md") and artifact_contains(
         workspace_path,

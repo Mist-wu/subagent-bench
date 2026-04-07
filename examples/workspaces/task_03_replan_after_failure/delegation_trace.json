@@ -1,0 +1,30 @@
+{
+  "delegations": [
+    {
+      "delegation_id": "migration-scan-v1",
+      "assignee": "code_searcher",
+      "instruction": "Find migration risks and write reports/risk_register.md",
+      "inputs": ["src/", "migrations/"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List risks", "List mitigations"],
+      "output_path": "reports/risk_register.md"
+    },
+    {
+      "delegation_id": "migration-scan-v2",
+      "assignee": "code_searcher",
+      "instruction": "Retry migration risk scan with docs/api-contract.md and write reports/risk_register.md",
+      "inputs": ["src/", "migrations/", "docs/api-contract.md"],
+      "constraints": ["Read only"],
+      "success_criteria": ["List risks", "Include mitigation", "Note contract mismatch"],
+      "output_path": "reports/risk_register.md"
+    }
+  ],
+  "subagent_results": [
+    {"delegation_id": "migration-scan-v1", "status": "failed"},
+    {"delegation_id": "migration-scan-v2", "status": "success"}
+  ],
+  "replans": [
+    {"reason": "Subagent could not infer the API contract. Add docs/api-contract.md and retry."}
+  ],
+  "verifications": []
+}
