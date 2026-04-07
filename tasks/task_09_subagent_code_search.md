@@ -33,8 +33,9 @@ The subagent should understand the delegated goal, use search tooling correctly,
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
+    from subagent_bench.orchestration_checks import transcript_has_tool_call
 
-    used_search_tool = 1.0 if any(event.get("type") == "tool_use" and event.get("tool") == "rg" for event in trace) else 0.0
+    used_search_tool = 1.0 if transcript_has_tool_call(trace, "rg") else 0.0
     artifact = Path(workspace_path) / "reports/raw_query_report.md"
     artifact_exists = 1.0 if artifact.exists() else 0.0
 
