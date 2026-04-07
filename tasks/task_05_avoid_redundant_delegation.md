@@ -31,7 +31,7 @@ grading_weights:
 
 The main agent needs code search findings for a single backend migration area. A bad orchestration policy would spawn multiple overlapping subagents that all inspect the same scope. A good policy should either keep the work local or issue one focused delegation that writes `reports/backend_migration_findings.md` and explicitly notes it was done in a single search pass.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root.
+Prefer leaving native delegation evidence in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
 ## Expected Behavior
 

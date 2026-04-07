@@ -36,8 +36,10 @@ def grade(trace: list, workspace_path: str) -> dict:
 
 ## Additional Notes
 
-- `trace` 是结构化 orchestration 事件列表，不再局限于普通 transcript。
-- 推荐事件：`delegate`、`subagent_result`、`replan`、`assistant_message`、`artifact_written`。
+- `trace` 可以是结构化 orchestration 事件，也可以是原生 transcript；评分逻辑应优先消费原生 runtime 信号，再回退到合成事件或兼容 artifact。
+- 推荐原生信号：`sessions_spawn` 调用、completion announce、子会话 tool use、artifact 写入。
+- 推荐结构化事件：`delegate`、`subagent_result`、`replan`、`assistant_message`、`artifact_written`。
+- 只有在原生 transcript 无法稳定暴露这些信号时，才建议额外写 `delegation_trace.json` 之类的兼容 artifact。
 - 如果后面要接 judge，可以在 trace 根对象增加 `judge_result`，并把 `grading_type` 改成 `hybrid` 或 `llm_judge`。
 - `benchmark_target` 取值建议为 `C6a`、`C6b` 或 `System`。
 - `task_type` 目前按 T1-T7 编号。

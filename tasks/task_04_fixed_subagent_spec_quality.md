@@ -33,7 +33,7 @@ grading_weights:
 
 The main agent must delegate a documentation extraction task to a fixed subagent. The benchmark is not about the subagent itself. It is about whether the main agent provides enough context, constraints, and output requirements for the fixed subagent to write `reports/extracted_api_summary.md` in markdown with clear headings for endpoints, auth scopes, and rate limits.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root. The single delegation entry must include the exact output path.
+Prefer leaving native delegation evidence in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback. The single delegation entry should include the exact output path.
 
 ## Expected Behavior
 

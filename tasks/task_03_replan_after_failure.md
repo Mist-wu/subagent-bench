@@ -37,7 +37,7 @@ grading_weights:
 
 Audit a risky migration plan. The first delegated search should be treated as failed because it does not include enough context. The main agent should notice the failure, replan, send a corrected delegation that includes `docs/api_contract.md` and `docs/dependency_notes.md`, and still finish `reports/risk_register.md`.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root. Record the failed first delegation, the recovery/replan step, and the later successful delegation.
+Prefer leaving native runtime evidence for the failed delegation, recovery, and later success in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
 ## Expected Behavior
 

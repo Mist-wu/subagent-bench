@@ -36,7 +36,7 @@ grading_weights:
 
 Prepare a launch brief by comparing frontend rollout risks and backend rollout risks. These two research streams can happen in parallel and should be delegated independently. Write the delegated outputs to `reports/frontend_risks.md` and `reports/backend_risks.md`, then merge the findings into `launch_brief.md`.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root. Each delegation entry must include `delegation_id`, `assignee`, `instruction`, `inputs`, `success_criteria`, and `output_path`.
+Prefer leaving native delegation evidence in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback. Each delegation entry should include `delegation_id`, `assignee`, `instruction`, `inputs`, `success_criteria`, and `output_path`.
 
 ## Expected Behavior
 

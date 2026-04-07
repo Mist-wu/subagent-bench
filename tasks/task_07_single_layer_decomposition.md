@@ -35,7 +35,7 @@ grading_weights:
 
 Break a medium-complexity launch-prep request into 2 to 4 independent subproblems. The main agent should delegate each slice once, avoid gaps and overlap, and merge the results into `reports/launch_plan.md`. At minimum, the final plan should cover frontend readiness, backend readiness, and docs readiness.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root.
+Prefer leaving native delegation evidence in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
 ## Expected Behavior
 

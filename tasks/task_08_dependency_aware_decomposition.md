@@ -36,7 +36,7 @@ grading_weights:
 
 Plan a migration where schema analysis must happen before code remediation. The main agent should delegate the schema scan to `reports/schema_scan.md` first, then delegate remediation planning to `reports/remediation_plan.md` using that scan as an input, and finally produce `reports/dependency_plan.md`.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root.
+Prefer leaving native delegation evidence in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
 ## Expected Behavior
 

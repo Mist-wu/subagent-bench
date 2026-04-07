@@ -36,7 +36,7 @@ grading_weights:
 
 Two subagents have already returned conflicting conclusions about whether a rollout is safe. Their outputs are in `reports/subagent_safe.md` and `reports/subagent_unsafe.md`. The main agent should not blindly merge them. It should verify the conflict by consulting `rollout-policy.md`, then produce `reports/final_decision.md`.
 
-For benchmark observability, write `delegation_trace.json` in the workspace root and record both subagent results plus the verification step.
+Prefer leaving native runtime evidence for both subagent results and the verification step in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
 ## Expected Behavior
 

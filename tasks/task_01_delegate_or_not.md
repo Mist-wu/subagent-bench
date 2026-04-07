@@ -54,7 +54,7 @@ grading_weights:
 
 Review the provided release checklist. The main agent should handle the trivial heading rename in `answer.md` directly, but it should delegate the repo-wide audit to a subagent. The delegated subagent should write its findings to `reports/dependency_audit.md`, and the main agent should integrate that result into `answer.md`.
 
-For benchmark observability, also write `delegation_trace.json` in the workspace root with this exact schema:
+Prefer leaving native delegation evidence in the transcript (for example `sessions_spawn` plus completion announce events). If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root with this schema as a compatibility fallback:
 
 ```json
 {
