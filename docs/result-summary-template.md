@@ -14,6 +14,13 @@
 - Subagent Fit:
 - Unified-Model Fit:
 
+## Selection Translation
+
+- Suitable as subagent:
+- Suitable as main agent:
+- Best fit in split-role architecture:
+- Best fit in unified-model architecture:
+
 ## Scores
 
 - Overall:

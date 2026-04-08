@@ -18,6 +18,13 @@ The clearest conclusion is that `C6b` is already strong while `C6a` remains the 
 
 This run supports the benchmark design hypothesis: measuring only subagent execution would significantly overestimate system quality. The main agent is often able to choose a reasonable split, but it still fails on waiting, integration, dependency ordering, and recovery.
 
+## Selection Translation
+
+- `gpt-5.4` is suitable as a `subagent`.
+- `gpt-5.4` still has clear weaknesses as a `main agent`.
+- In a split-role architecture with a stronger orchestrator and a stronger executor, `gpt-5.4` looks more like an executor candidate.
+- If the system requires one model to handle both orchestration and execution, `gpt-5.4` is usable but not the best candidate.
+
 ## Score Table
 
 | Task | Target | Type | Score | Interpretation |
