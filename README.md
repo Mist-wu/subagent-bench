@@ -1,100 +1,86 @@
 # subagent-bench
 
-`subagent-bench` is a model-selection benchmark for multi-agent systems.
+[English](README.md) | [中文](README_CN.md)
 
-It is designed to answer three questions:
+A benchmark for evaluating **multi-agent orchestration**. Helps you answer: which model works best as the main agent, which as the subagent, and which can do both.
 
-- which model is best suited for the `main agent`
-- which model is best suited for the `subagent`
-- which model is acceptable as a single model for both roles
+## Why
 
-The benchmark separates:
+Most benchmarks test single-agent end-to-end performance. `subagent-bench` measures what they miss:
 
-- `C6a`: main-agent orchestration
-- `C6b`: subagent execution
+- **C6a (Orchestration)** — delegation, parallelism, replanning, integration
+- **C6b (Execution)** — subagent tool use, correctness, error handling
 
-That separation matters for model selection. A model can be strong at execution and still be weak at delegation, waiting, integration, or replan.
+A model can ace execution but fail at orchestration. This benchmark tells you which is which.
 
-## Install
-
-Requires Python 3.11+.
+## Quick Start
 
 ```bash
+# Install (Python 3.11+)
 pip install -e ".[dev]"
-```
 
-## Run
-
-Offline grading:
-
-```bash
+# Grade recorded traces (offline)
 subagent-bench grade \
   --traces-dir examples/traces \
   --workspace-root examples/workspaces
-```
 
-Live benchmark:
-
-```bash
+# Run live benchmark
 ./scripts/run.sh --model anthropic/claude-sonnet-4
 ```
 
-Useful flags:
+## CLI Flags
 
-| Flag | Meaning |
+| Flag | Description |
 |---|---|
-| `--model` | model under test |
+| `--model` | Model under test |
 | `--suite` | `all` or specific task IDs |
-| `--runs` | repeat runs for averaging |
-| `--judge` | override judge model |
-| `--base-url` | custom OpenAI-compatible endpoint |
-| `--no-upload` | skip upload |
+| `--runs` | Repeat count for averaging |
+| `--judge` | Override judge model |
+| `--base-url` | Custom OpenAI-compatible endpoint |
+| `--no-upload` | Skip result upload |
 
-## How To Read Results
+## Reading Results
 
-Use the benchmark for selection, not just scoring.
+| Score Pattern | Interpretation |
+|---|---|
+| High C6a, Low C6b | Best as **main agent** |
+| Low C6a, High C6b | Best as **subagent** |
+| High both | **Unified model** candidate |
 
-- high `C6a`, lower `C6b`: better `main agent` candidate
-- lower `C6a`, high `C6b`: better `subagent` candidate
-- high on both with acceptable cost/latency: better unified-model candidate
+## Tasks
 
-The final output should be read as:
+| Task | Target | Description |
+|---|---|---|
+| `task_01` | C6a | Delegation decision |
+| `task_02` | C6a | Parallel delegation |
+| `task_03` | C6a | Recovery & replan |
+| `task_04` | C6a | Delegation spec quality |
+| `task_05` | C6a | Avoid redundant delegation |
+| `task_06` | C6a | Conflict verification |
+| `task_07` | C6a | Single-layer decomposition |
+| `task_08` | C6a | Dependency-aware decomposition |
+| `task_09` | C6b | Code search execution |
+| `task_10` | C6b | Output compliance |
+| `task_11` | C6b | Error handling |
 
-1. `Main-Agent Fit`
-2. `Subagent Fit`
-3. `Unified-Model Fit`
-4. cost / latency / stability tradeoffs
+## Project Structure
 
-## Task Set
-
-| Task | Target | Type | Purpose |
-|---|---|---|---|
-| `task_01` | C6a | T1 | delegation decision |
-| `task_02` | C6a | T4 | parallel delegation |
-| `task_03` | C6a | T6 | recovery and replan |
-| `task_04` | C6a | T5 | delegation spec quality |
-| `task_05` | C6a | T2 | avoid redundant delegation |
-| `task_06` | C6a | T7 | conflict verification |
-| `task_07` | C6a | T2 | single-layer decomposition |
-| `task_08` | C6a | T3 | dependency-aware decomposition |
-| `task_09` | C6b | execution_search | code search execution |
-| `task_10` | C6b | execution_transform | output compliance |
-| `task_11` | C6b | execution_recovery | error handling |
-
-## Layout
-
-```text
-tasks/              benchmark tasks
-src/subagent_bench/ offline grading and CLI
-scripts/            live runner
-examples/           sample traces and outputs
-docs/               design notes and result summaries
-tests/              regression tests
+```
+tasks/              → Benchmark task definitions
+src/subagent_bench/ → Offline grading, schema, CLI
+scripts/            → Live benchmark runner
+examples/           → Sample traces & workspaces
+docs/               → Design docs & result summaries
+tests/              → Regression tests
 ```
 
 ## Docs
 
-- [Benchmark design](docs/benchmark-design.md)
-- [Result summary template](docs/result-summary-template.md)
-- [PinchBench analysis](docs/pinchbench-analysis.md)
-- [Task template](tasks/TASK_TEMPLATE.md)
+- [Benchmark Design](docs/benchmark-design.md)
+- [Result Summary Template](docs/result-summary-template.md)
+- [PinchBench Analysis](docs/pinchbench-analysis.md)
+- [Task Template](tasks/TASK_TEMPLATE.md)
+
+## License
+
+[MIT](LICENSE)
