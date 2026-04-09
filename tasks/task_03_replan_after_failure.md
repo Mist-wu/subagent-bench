@@ -46,20 +46,27 @@ The main agent should not stop at the first subagent failure. It should either a
 ## Grading Criteria
 
 - [ ] A failed subagent result is detected
-- [ ] The main agent triggers an explicit replan or retry
-- [ ] A later delegation succeeds
+- [ ] The main agent triggers an explicit replan, retry, or local fallback
+- [ ] Recovery succeeds via a corrected delegation or local completion
 - [ ] Final risk register is produced with a recovery note
 
 ## Automated Checks
 
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
-    from subagent_bench.orchestration_checks import artifact_contains, artifact_exists, replan_events, subagent_results
+    from subagent_bench.orchestration_checks import (
+        artifact_contains,
+        artifact_exists,
+        local_recovery_events,
+        replan_events,
+        subagent_results,
+    )
 
     results = subagent_results(trace, workspace_path)
+    local_recoveries = local_recovery_events(trace, workspace_path)
     saw_failure = 1.0 if any(event.get("status") == "failed" for event in results) else 0.0
     replanned = 1.0 if replan_events(trace, workspace_path) else 0.0
-    recovered = 1.0 if any(event.get("status") == "success" for event in results[1:]) else 0.0
+    recovered = 1.0 if any(event.get("status") == "success" for event in results[1:]) else 0.5 if local_recoveries else 0.0
     risk_register = 1.0 if artifact_exists(workspace_path, "reports/risk_register.md") and artifact_contains(
         workspace_path,
         "reports/risk_register.md",
@@ -77,14 +84,14 @@ def grade(trace: list, workspace_path: str) -> dict:
 ## LLM Judge Rubric
 
 ### Criterion 1: Split Quality
-**Score 1.0**: The recovery plan correctly reframes the delegated work after failure.
-**Score 0.5**: Recovery exists but the revised task is only partly well-scoped.
+**Score 1.0**: The recovery plan correctly reframes the work after failure, whether by redelegation or a clear local fallback.
+**Score 0.5**: Recovery exists but the revised path is only partly well-scoped.
 **Score 0.0**: No meaningful recovery plan appears.
 
 ### Criterion 2: Delegation Clarity
-**Score 1.0**: The retry delegation adds the missing context and clarifies expectations.
-**Score 0.5**: The retry is partially clearer but still underspecified.
-**Score 0.0**: The retry leaves the original ambiguity unresolved.
+**Score 1.0**: The recovery path adds the missing context or otherwise makes the corrected execution path explicit.
+**Score 0.5**: The recovery path is partially clearer but still underspecified.
+**Score 0.0**: The recovery path leaves the original ambiguity unresolved.
 
 ### Criterion 3: Integration Reliability
 **Score 1.0**: The final output reflects the recovery path and remains reliable.

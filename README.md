@@ -13,6 +13,8 @@ Most benchmarks test single-agent end-to-end performance. `subagent-bench` measu
 
 A model can ace execution but fail at orchestration. This benchmark tells you which is which.
 
+Live `C6b` tasks are evaluated through OpenClaw's native `sessions_spawn` path so the leaf work is completed by a real child session instead of by the main session roleplaying as a subagent.
+
 ## Quick Start
 
 ```bash
@@ -73,6 +75,10 @@ examples/           → Sample traces & workspaces
 docs/               → Design docs & result summaries
 tests/              → Regression tests
 ```
+
+## Scoring Notes
+
+`C6a` grading prefers native transcript signals first and treats `delegation_trace.json` as a compatibility fallback. Recovery can be recognized either as a corrected redelegation or as a visible main-session local fix after a failed delegation.
 
 ## Docs
 

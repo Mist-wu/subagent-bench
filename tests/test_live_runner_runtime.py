@@ -6,7 +6,11 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from lib_agent import _extract_usage_from_transcripts, _resolve_live_task_prompt  # noqa: E402
+from lib_agent import (  # noqa: E402
+    _extract_usage_from_transcripts,
+    _normalize_native_subagent_worker_prompt,
+    _resolve_live_task_prompt,
+)
 from lib_tasks import Task  # noqa: E402
 
 
@@ -28,7 +32,16 @@ def test_live_execution_tasks_are_wrapped_for_native_subagents() -> None:
 
     assert 'runtime: "subagent"' in prompt
     assert "You are the main agent for this benchmark task." in prompt
-    assert "You are a subagent. Search the repo and write a report." in prompt
+    assert "Search the repo and write a report." in prompt
+    assert "You are a subagent. Search the repo and write a report." not in prompt
+
+
+def test_native_subagent_worker_prompt_strips_legacy_role_prefix() -> None:
+    prompt = _normalize_native_subagent_worker_prompt(
+        "You are a subagent. Search the repo and write a report."
+    )
+
+    assert prompt == "Search the repo and write a report."
 
 
 def test_usage_is_aggregated_across_parent_and_child_transcripts() -> None:

@@ -28,12 +28,38 @@ def subagent_results(trace: Iterable[Dict[str, Any]], workspace_path: str | None
     return native
 
 
+def concurrent_delegate_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    delegations = delegate_events(trace, workspace_path)
+    results = subagent_results(trace, workspace_path)
+    if not delegations:
+        return []
+
+    first_result_index = min(
+        (int(result.get("__index__", 1_000_000_000)) for result in results),
+        default=1_000_000_000,
+    )
+    return [
+        event
+        for event in delegations
+        if int(event.get("__index__", 1_000_000_000)) < first_result_index
+    ]
+
+
 def replan_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
     trace_list = list(trace)
     native = _native_replan_events(trace_list)
     trace_bundle = load_delegation_trace(workspace_path)
     if trace_bundle:
         native = _merge_event_lists(native, list(trace_bundle.get("replans", [])), "reason")
+    return native
+
+
+def local_recovery_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
+    trace_list = list(trace)
+    native = _native_local_recovery_events(trace_list)
+    trace_bundle = load_delegation_trace(workspace_path)
+    if trace_bundle:
+        native = _merge_event_lists(native, list(trace_bundle.get("local_recoveries", [])), "reason")
     return native
 
 
@@ -179,8 +205,11 @@ def _extract_output_path(instruction: str) -> str:
 
 def _native_delegate_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     structured = [
-        dict(event)
-        for event in trace
+        {
+            **dict(event),
+            "__index__": event.get("__index__", index),
+        }
+        for index, event in enumerate(trace)
         if event.get("type") == "delegate"
     ]
     if structured:
@@ -221,8 +250,11 @@ def _native_delegate_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 def _native_subagent_results(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     structured = [
-        dict(event)
-        for event in trace
+        {
+            **dict(event),
+            "__index__": event.get("__index__", index),
+        }
+        for index, event in enumerate(trace)
         if event.get("type") == "subagent_result"
     ]
     parsed = structured[:]
@@ -251,8 +283,11 @@ def _native_subagent_results(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]
 
 def _native_replan_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     structured = [
-        dict(event)
-        for event in trace
+        {
+            **dict(event),
+            "__index__": event.get("__index__", index),
+        }
+        for index, event in enumerate(trace)
         if event.get("type") == "replan"
     ]
     if structured:
@@ -273,24 +308,64 @@ def _native_replan_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             ),
             None,
         )
-        if later_delegation is None:
+        if later_delegation is not None:
+            replans.append(
+                {
+                    "type": "replan",
+                    "reason": "A failed subagent completion was followed by a new delegation.",
+                    "failed_delegation_id": result.get("delegation_id"),
+                    "recovery_mode": "delegate",
+                    "recovery_delegation_id": later_delegation.get("delegation_id"),
+                    "__index__": later_delegation.get("__index__", result_index),
+                }
+            )
+            continue
+
+        local_recovery = _first_local_recovery_after_failure(trace, result_index)
+        if local_recovery is None:
             continue
         replans.append(
             {
                 "type": "replan",
-                "reason": "A failed subagent completion was followed by a new delegation.",
+                "reason": "A failed subagent completion was followed by a local recovery path in the main session.",
                 "failed_delegation_id": result.get("delegation_id"),
-                "recovery_delegation_id": later_delegation.get("delegation_id"),
-                "__index__": later_delegation.get("__index__", result_index),
+                "recovery_mode": "local",
+                "source": local_recovery.get("source", "local"),
+                "__index__": local_recovery.get("__index__", result_index),
             }
         )
     return replans
 
 
+def _native_local_recovery_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    results = subagent_results(trace)
+    recoveries: List[Dict[str, Any]] = []
+    for result in results:
+        if result.get("status") != "failed":
+            continue
+        result_index = int(result.get("__index__", -1))
+        recovery = _first_local_recovery_after_failure(trace, result_index)
+        if recovery is None:
+            continue
+        recoveries.append(
+            {
+                "type": "local_recovery",
+                "reason": "A failed delegated step was followed by local main-session execution.",
+                "failed_delegation_id": result.get("delegation_id"),
+                "source": recovery.get("source", "local"),
+                "__index__": recovery.get("__index__", result_index),
+            }
+        )
+    return recoveries
+
+
 def _native_verification_events(trace: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     structured = [
-        dict(event)
-        for event in trace
+        {
+            **dict(event),
+            "__index__": event.get("__index__", index),
+        }
+        for index, event in enumerate(trace)
         if event.get("type") == "verification"
     ]
     if structured:
@@ -355,6 +430,34 @@ def _sessions_spawn_tool_results(trace: List[Dict[str, Any]]) -> Dict[str, Dict[
         if isinstance(details, dict):
             indexed[tool_call_id] = details
     return indexed
+
+
+def _first_local_recovery_after_failure(
+    trace: List[Dict[str, Any]],
+    failed_result_index: int,
+) -> Dict[str, Any] | None:
+    for index in range(failed_result_index + 1, len(trace)):
+        event = trace[index]
+        if event.get("session_source") == "child":
+            continue
+        if event.get("type") == "delegate":
+            return None
+        if event.get("type") == "tool_use":
+            return {"source": event.get("tool", "tool"), "__index__": index}
+        if event.get("type") == "artifact_written":
+            return {"source": "artifact_written", "__index__": index}
+        if event.get("type") != "message":
+            continue
+        message = event.get("message", {})
+        if message.get("role") != "assistant":
+            continue
+        for item in _message_items(message):
+            if item.get("type") != "toolCall":
+                continue
+            if item.get("name") == "sessions_spawn":
+                return None
+            return {"source": item.get("name", "tool"), "__index__": index}
+    return None
 
 
 def _message_items(message: Dict[str, Any]) -> List[Dict[str, Any]]:

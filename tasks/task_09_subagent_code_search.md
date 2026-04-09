@@ -82,11 +82,11 @@ grading_weights:
 
 ## Prompt
 
-You are a subagent. Search the codebase for deprecated `db.rawQuery()` calls and write a precise report to `reports/raw_query_report.md`. Preserve exact file paths and line numbers.
+Search the codebase for deprecated `db.rawQuery()` calls and write a precise report to `reports/raw_query_report.md`. Preserve exact file paths and line numbers.
 
 ## Expected Behavior
 
-The subagent should understand the delegated goal, use search tooling correctly, find all targeted occurrences, and produce the requested report without asking the main agent for clarification.
+The delegated worker should understand the goal, use search tooling correctly, find all targeted occurrences, and produce the requested report without asking the main agent for clarification.
 
 ## Grading Criteria
 

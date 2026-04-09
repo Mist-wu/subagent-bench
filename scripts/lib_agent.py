@@ -960,20 +960,29 @@ def _resolve_live_task_prompt(task: Task) -> str:
     if live_mode != "native_subagent":
         return task.prompt
 
+    worker_prompt = _normalize_native_subagent_worker_prompt(task.prompt)
     return (
         "You are the main agent for this benchmark task.\n\n"
         "Use a real OpenClaw subagent to perform the leaf work.\n"
         "Requirements:\n"
         '- Delegate the worker task with `sessions_spawn` using `runtime: "subagent"`.\n'
         "- The spawned subagent must do the actual leaf execution; do not do that work yourself if spawn succeeds.\n"
-        "- Pass the full delegated worker task below to the subagent.\n"
+        "- Pass the full delegated worker task below to the subagent without adding roleplay instructions.\n"
         "- Wait for push-based completion instead of polling child session history.\n"
         "- Only finish after the requested artifact exists in the workspace.\n\n"
         "Delegated worker task:\n"
         "--- BEGIN SUBAGENT TASK ---\n"
-        f"{task.prompt.strip()}\n"
+        f"{worker_prompt}\n"
         "--- END SUBAGENT TASK ---"
     )
+
+
+def _normalize_native_subagent_worker_prompt(prompt: str) -> str:
+    normalized = prompt.strip()
+    prefix = "You are a subagent."
+    if normalized.startswith(prefix):
+        normalized = normalized[len(prefix):].lstrip()
+    return normalized
 
 
 def _is_session_lock_error(stderr: str) -> bool:

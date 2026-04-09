@@ -165,6 +165,7 @@ def infer_failure_attribution(task: Task, breakdown: Dict[str, Any]) -> list[str
             "expected_dependency_delegations",
             "downstream_consumes_upstream_output",
             "parallel_delegations",
+            "concurrency_overlap",
             "non_overlapping_outputs",
             "waits_for_both_results",
             "single_delegation",

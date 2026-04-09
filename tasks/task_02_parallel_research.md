@@ -54,12 +54,14 @@ The main agent should create two non-overlapping delegations, wait for both resu
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import delegate_events, subagent_results
+    from subagent_bench.orchestration_checks import concurrent_delegate_events, delegate_events, subagent_results
 
     delegations = delegate_events(trace, workspace_path)
+    concurrent = concurrent_delegate_events(trace, workspace_path)
     results = subagent_results(trace, workspace_path)
 
     has_two = 1.0 if len(delegations) == 2 else 0.0
+    overlap = 1.0 if len(concurrent) >= 2 else 0.0
     distinct_outputs = 1.0 if len({event.get("output_path") for event in delegations}) == 2 else 0.0
 
     result_ids = {event.get("delegation_id") for event in results if event.get("status") == "success"}
@@ -73,6 +75,7 @@ def grade(trace: list, workspace_path: str) -> dict:
 
     return {
         "parallel_delegations": has_two,
+        "concurrency_overlap": overlap,
         "non_overlapping_outputs": distinct_outputs,
         "waits_for_both_results": waited,
         "merged_brief": merged,

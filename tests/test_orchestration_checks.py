@@ -1,5 +1,7 @@
 from subagent_bench.orchestration_checks import (
+    concurrent_delegate_events,
     delegate_events,
+    local_recovery_events,
     replan_events,
     subagent_results,
     verification_events,
@@ -140,7 +142,91 @@ def test_subagent_results_replan_and_verification_are_inferred_from_native_runti
 
     assert [result["status"] for result in results] == ["failed", "success"]
     assert replans and replans[0]["failed_delegation_id"] == "risk-audit-1"
+    assert replans[0]["recovery_mode"] == "delegate"
     assert verifications and verifications[0]["source"] == "read"
+
+
+def test_failed_delegation_followed_by_local_work_counts_as_replan_and_local_recovery() -> None:
+    trace = [
+        {
+            "type": "message",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": "call-1",
+                        "name": "sessions_spawn",
+                        "arguments": {
+                            "label": "risk-audit-1",
+                            "task": "Audit the migration brief only",
+                            "runtime": "subagent",
+                        },
+                    }
+                ],
+            },
+        },
+        {
+            "type": "message",
+            "message": {
+                "role": "user",
+                "internalEvents": [
+                    {
+                        "type": "task_completion",
+                        "source": "subagent",
+                        "taskLabel": "risk-audit-1",
+                        "status": "error",
+                        "result": "Missing api contract context.",
+                    }
+                ],
+            },
+        },
+        {
+            "type": "tool_use",
+            "tool": "read",
+        },
+        {
+            "type": "artifact_written",
+            "path": "reports/risk_register.md",
+        },
+    ]
+
+    replans = replan_events(trace)
+    recoveries = local_recovery_events(trace)
+
+    assert replans and replans[0]["recovery_mode"] == "local"
+    assert replans[0]["source"] == "read"
+    assert recoveries and recoveries[0]["failed_delegation_id"] == "risk-audit-1"
+
+
+def test_concurrent_delegate_events_require_launch_before_first_result() -> None:
+    trace = [
+        {
+            "type": "delegate",
+            "delegation_id": "frontend",
+            "__index__": 0,
+        },
+        {
+            "type": "delegate",
+            "delegation_id": "backend",
+            "__index__": 1,
+        },
+        {
+            "type": "subagent_result",
+            "delegation_id": "frontend",
+            "status": "success",
+            "__index__": 2,
+        },
+        {
+            "type": "delegate",
+            "delegation_id": "follow-up",
+            "__index__": 3,
+        },
+    ]
+
+    concurrent = concurrent_delegate_events(trace)
+
+    assert [event["delegation_id"] for event in concurrent] == ["frontend", "backend"]
 
 
 def test_subagent_results_parse_internal_runtime_text_blocks() -> None:

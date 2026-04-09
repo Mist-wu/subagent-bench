@@ -23,7 +23,7 @@ grading_weights:
 
 ## Prompt
 
-You are a subagent. Convert `data/employees.csv` into JSON and write it to `data/employees.json` with this shape:
+Convert `data/employees.csv` into JSON and write it to `data/employees.json` with this shape:
 
 ```json
 {
@@ -36,7 +36,7 @@ You are a subagent. Convert `data/employees.csv` into JSON and write it to `data
 
 ## Expected Behavior
 
-The subagent should execute the delegated transformation, preserve all rows, and comply with the requested JSON output contract.
+The delegated worker should execute the transformation, preserve all rows, and comply with the requested JSON output contract.
 
 ## Grading Criteria
 

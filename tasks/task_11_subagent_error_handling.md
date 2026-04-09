@@ -18,11 +18,11 @@ workspace_files:
 
 ## Prompt
 
-You are a subagent. First try to read `inputs/primary_source.txt`, which is intentionally missing. Recover by using `inputs/fallback_source.txt` instead and still write `reports/recovered_summary.md`. Mention `fallback source` in the final report.
+First try to read `inputs/primary_source.txt`, which is intentionally missing. Recover by using `inputs/fallback_source.txt` instead and still write `reports/recovered_summary.md`. Mention `fallback source` in the final report.
 
 ## Expected Behavior
 
-The subagent should detect the failure, switch to the fallback input, and complete the delegated output instead of silently aborting.
+The delegated worker should detect the failure, switch to the fallback input, and complete the requested output instead of silently aborting.
 
 ## Grading Criteria
 
