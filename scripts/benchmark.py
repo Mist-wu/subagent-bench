@@ -230,6 +230,11 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--allow-self-judge",
+        action="store_true",
+        help="Allow the benchmark model to also act as the LLM judge for llm_judge/hybrid tasks.",
+    )
+    parser.add_argument(
         "--base-url",
         default=None,
         help="Custom OpenAI-compatible API base URL (bypasses OpenRouter validation)",
@@ -275,6 +280,28 @@ def _next_run_id(run_root: Path) -> str:
             existing.append(int(entry.name))
     next_id = (max(existing) + 1) if existing else 1
     return f"{next_id:04d}"
+
+
+def _requires_independent_judge(tasks: List[Task]) -> bool:
+    return any(task.grading_type in {"llm_judge", "hybrid"} for task in tasks)
+
+
+def _validate_judge_configuration(args: argparse.Namespace, tasks_to_run: List[Task]) -> None:
+    if not _requires_independent_judge(tasks_to_run):
+        return
+    judge_model = args.judge or args.model
+    if judge_model != args.model:
+        return
+    if args.allow_self_judge:
+        logger.warning(
+            "Self-judge override enabled: model %s will also score its own outputs.",
+            args.model,
+        )
+        return
+    raise ValueError(
+        "LLM judge tasks require an independent judge model. "
+        "Use --judge <different_model> or --allow-self-judge to override."
+    )
 
 
 def _load_ascii_art(script_dir: Path, filename: str) -> str | None:
@@ -632,6 +659,11 @@ def main():
     if task_ids is not None:
         tasks_to_run = [task for task in runner.tasks if task.task_id in task_ids]
     tasks_by_id = {task.task_id: task for task in tasks_to_run}
+    try:
+        _validate_judge_configuration(args, tasks_to_run)
+    except ValueError as exc:
+        logger.error(str(exc))
+        sys.exit(2)
 
     runs_per_task = max(1, args.runs)
 

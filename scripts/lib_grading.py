@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_JUDGE_MODEL = "openai-codex/gpt-5.4"
 DEFAULT_JUDGE_AGENT_PREFIX = "bench-judge"
 DEFAULT_JUDGE_TIMEOUT_SECONDS = 180
-JUDGE_TRANSCRIPT_PREVIEW_CHARS = 6000
-JUDGE_WORKSPACE_PREVIEW_CHARS = 3000
+JUDGE_TRANSCRIPT_PREVIEW_CHARS = int(os.environ.get("SUBAGENT_BENCH_JUDGE_TRANSCRIPT_CHARS", "12000"))
+JUDGE_WORKSPACE_PREVIEW_CHARS = int(os.environ.get("SUBAGENT_BENCH_JUDGE_WORKSPACE_CHARS", "6000"))
 
 
 @dataclass
@@ -131,7 +132,7 @@ def _grade_automated(task: Task, execution_result: Dict[str, Any], verbose: bool
     if verbose:
         logger.info("   [VERBOSE] Automated grading scores: %s", scores)
 
-    total = _average_scores(scores)
+    total = _average_scores(scores, task.automated_weights)
     return GradeResult(
         task_id=task.task_id,
         score=total,
@@ -281,11 +282,28 @@ def _extract_grading_code(task: Task) -> str:
     return match.group(1)
 
 
-def _average_scores(scores: Dict[str, Any]) -> float:
-    values = [float(v) for v in scores.values() if isinstance(v, (int, float))]
-    if not values:
+def _average_scores(scores: Dict[str, Any], weights: Optional[Dict[str, float]] = None) -> float:
+    numeric_scores = {
+        str(key): float(value)
+        for key, value in scores.items()
+        if isinstance(value, (int, float))
+    }
+    if not numeric_scores:
         return 0.0
-    return sum(values) / len(values)
+    if not weights:
+        return sum(numeric_scores.values()) / len(numeric_scores)
+
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for key, value in numeric_scores.items():
+        weight = float(weights.get(key, 1.0))
+        if weight <= 0:
+            continue
+        total_weight += weight
+        weighted_sum += value * weight
+    if total_weight <= 0:
+        return sum(numeric_scores.values()) / len(numeric_scores)
+    return weighted_sum / total_weight
 
 
 def _normalize_score_dict(scores: Dict[str, Any]) -> Dict[str, float]:

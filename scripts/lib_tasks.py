@@ -32,6 +32,7 @@ class Task:
         grading_criteria: List[str],
         automated_checks: Optional[str] = None,
         llm_judge_rubric: Optional[str] = None,
+        automated_weights: Optional[Dict[str, float]] = None,
         grading_weights: Optional[Dict[str, float]] = None,
         file_path: Optional[Path] = None,
         frontmatter: Optional[Dict[str, Any]] = None,
@@ -47,6 +48,7 @@ class Task:
         self.grading_criteria = grading_criteria
         self.automated_checks = automated_checks
         self.llm_judge_rubric = llm_judge_rubric
+        self.automated_weights = automated_weights
         self.grading_weights = grading_weights
         self.file_path = file_path
         self.frontmatter = frontmatter or {}
@@ -68,6 +70,7 @@ class Task:
             'grading_criteria': self.grading_criteria,
             'has_automated_checks': self.automated_checks is not None,
             'has_llm_judge_rubric': self.llm_judge_rubric is not None,
+            'automated_weights': self.automated_weights,
             'grading_weights': self.grading_weights,
             'frontmatter': self.frontmatter,
         }
@@ -142,6 +145,7 @@ class TaskLoader:
             grading_criteria=grading_criteria,
             automated_checks=sections.get('Automated Checks', None),
             llm_judge_rubric=sections.get('LLM Judge Rubric', None),
+            automated_weights=metadata.get('automated_weights', None),
             grading_weights=metadata.get('grading_weights', None),
             file_path=task_file,
             frontmatter=metadata,
