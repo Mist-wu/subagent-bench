@@ -154,7 +154,7 @@ def _grade_llm_judge(
     skill_dir: Optional[Path] = None,
     verbose: bool = False,
 ) -> GradeResult:
-    transcript = execution_result.get("transcript", [])
+    transcript = execution_result.get("trace") or execution_result.get("transcript", [])
     execution_status = execution_result.get("status", "unknown")
 
     if not transcript and execution_status != "success":

@@ -736,47 +736,67 @@ def _wait_for_transcript_settle(
     started_at: float,
     initial_transcript_path: Optional[Path],
     *,
-    quiet_seconds: float = 8.0,
+    quiet_seconds: float = 10.0,
     max_wait_seconds: float = 180.0,
-) -> tuple[List[Dict[str, Any]], Optional[Path]]:
-    """Wait for OpenClaw async child-session updates to stop mutating the transcript."""
+) -> tuple[List[Dict[str, Any]], Optional[Path], List[Dict[str, Any]]]:
+    """Wait for parent and child transcript files to stop mutating."""
+
+    def _snapshot() -> tuple[List[Dict[str, Any]], Optional[Path], List[Dict[str, Any]]]:
+        latest_transcript, latest_path = _load_transcript(agent_id, session_id, started_at)
+        latest_related = _load_related_transcripts(agent_id, started_at, latest_path)
+        return latest_transcript, latest_path, latest_related
+
+    def _activity_signature(
+        primary_entries: List[Dict[str, Any]],
+        primary_path: Optional[Path],
+        related_records: List[Dict[str, Any]],
+    ) -> tuple[Any, ...]:
+        records: List[tuple[str, int, float, int]] = []
+
+        def add_record(path: Optional[Path], entries: List[Dict[str, Any]]) -> None:
+            if path is None:
+                records.append(("<missing>", -1, -1.0, len(entries)))
+                return
+            try:
+                stat_result = path.stat()
+                records.append((str(path), stat_result.st_size, stat_result.st_mtime, len(entries)))
+            except OSError:
+                records.append((str(path), -1, -1.0, len(entries)))
+
+        add_record(primary_path, primary_entries)
+        for record in sorted(
+            related_records,
+            key=lambda item: str(item.get("path", "")),
+        ):
+            add_record(record.get("path"), record.get("entries", []))
+        return tuple(records)
+
     deadline = time.time() + max_wait_seconds
     transcript_path = initial_transcript_path
-    transcript, transcript_path = _load_transcript(agent_id, session_id, started_at)
-    if transcript_path is None:
-        return transcript, transcript_path
-
-    try:
-        last_size = transcript_path.stat().st_size
-        last_mtime = transcript_path.stat().st_mtime
-    except OSError:
-        return transcript, transcript_path
+    transcript, transcript_path, related_transcripts = _snapshot()
+    activity_signature = _activity_signature(transcript, transcript_path, related_transcripts)
 
     last_change = time.time()
     while time.time() < deadline:
         time.sleep(2.0)
-        latest_transcript, latest_path = _load_transcript(agent_id, session_id, started_at)
+        latest_transcript, latest_path, latest_related = _snapshot()
         if latest_path is not None:
             transcript_path = latest_path
-        try:
-            current_size = transcript_path.stat().st_size
-            current_mtime = transcript_path.stat().st_mtime
-        except OSError:
-            transcript = latest_transcript
-            continue
+        latest_signature = _activity_signature(latest_transcript, transcript_path, latest_related)
 
-        if current_size != last_size or current_mtime != last_mtime or len(latest_transcript) != len(transcript):
+        if latest_signature != activity_signature:
             transcript = latest_transcript
-            last_size = current_size
-            last_mtime = current_mtime
+            related_transcripts = latest_related
+            activity_signature = latest_signature
             last_change = time.time()
             continue
 
         transcript = latest_transcript
+        related_transcripts = latest_related
         if time.time() - last_change >= quiet_seconds:
             break
 
-    return transcript, transcript_path
+    return transcript, transcript_path, related_transcripts
 
 
 def _extract_usage_from_transcript(transcript: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1129,15 +1149,15 @@ def execute_openclaw_task(
                 break
 
     transcript, transcript_path = _load_transcript(agent_id, session_id, start_time)
+    related_transcripts = _load_related_transcripts(agent_id, start_time, transcript_path)
     if transcript and _transcript_has_async_handoff(transcript):
-        transcript, transcript_path = _wait_for_transcript_settle(
+        transcript, transcript_path, related_transcripts = _wait_for_transcript_settle(
             agent_id,
             session_id,
             start_time,
             transcript_path,
             max_wait_seconds=max(60.0, min(240.0, timeout_seconds)),
         )
-    related_transcripts = _load_related_transcripts(agent_id, start_time, transcript_path)
     trace = _build_execution_trace(transcript, transcript_path, related_transcripts)
     usage = _extract_usage_from_transcripts(
         [transcript, *[record.get("entries", []) for record in related_transcripts]]
