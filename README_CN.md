@@ -65,6 +65,56 @@ subagent-bench grade \
 | `task_10` | C6b | 输出格式合规 |
 | `task_11` | C6b | 异常处理 |
 
+## 任务格式
+
+每个任务是一个带 YAML frontmatter 的 Markdown 文件：
+
+```yaml
+---
+id: task_01
+benchmark_target: C6a
+task_type: T1
+dimensions: ["delegation_decision_accuracy"]
+grading_type: automated     # automated | llm_judge | hybrid
+timeout_seconds: 180
+---
+```
+
+各 section：`## Prompt`、`## Expected Behavior`、`## Grading Criteria`、`## Automated Checks`、`## LLM Judge Rubric`。
+
+## Trace 格式
+
+Trace 为 JSON，包含 `events` 数组，关键事件类型：
+
+| 事件 | 含义 |
+|---|---|
+| `delegate` | 主 Agent 向子 Agent 委派任务 |
+| `subagent_result` | 子 Agent 返回结果 |
+| `replan` | 主 Agent 重新规划 |
+| `tool_use` / `tool_result` | 工具调用及返回 |
+| `artifact_written` | 产物写入 |
+| `verification` | 结果核验 |
+
+## 评分机制
+
+三种模式，通过任务 frontmatter 的 `grading_type` 配置：
+
+- **`automated`** — 每个任务的 `## Automated Checks` 区块内嵌确定性 Python 函数 `grade(trace, workspace_path) → dict`，加权平均得出 `[0.0, 1.0]` 分数。
+- **`llm_judge`** — 将任务 prompt、transcript 摘要、rubric 拼成结构化 prompt 发给裁判 LLM，返回 `{"scores": {...}, "total": float}`。所有任务统一三个评分维度：`split_quality`、`delegation_clarity`、`integration_reliability`。
+- **`hybrid`** — 两者加权组合，通过 frontmatter 的 `grading_weights` 配置（如 `automated: 0.6`、`llm_judge: 0.4`）。
+
+失败归因分为：**委派失败**、**执行失败**、**整合失败**。
+
+**离线 vs 在线：**
+
+| | 离线（`subagent-bench grade`） | 在线（`scripts/benchmark.py`） |
+|---|---|---|
+| Trace 来源 | `examples/traces/` 中的预录 JSON | 实时执行 Agent |
+| LLM 评判 | 读取 trace 中已嵌入的 `judge_result` | 实时调用裁判 API |
+| 适用场景 | 回归测试 | 对真实 Agent 跑完整基准 |
+
+对于 C6a，评分优先消费 transcript 中的原生信号；`delegation_trace.json` 仅作为兼容 fallback。失败恢复既可通过重新委派体现，也可通过主会话本地修复获得部分分。
+
 ## 项目结构
 
 ```
@@ -75,16 +125,6 @@ examples/           → 示例 trace 与工作区输出
 docs/               → 设计文档与结果汇总
 tests/              → 回归测试
 ```
-
-## 评分机制
-
-- **automated** — 确定性 Python 检查（trace 事件序列、文件输出）
-- **llm_judge** — 基于评分细则的 LLM 评判
-- **hybrid** — 两者加权组合
-
-对于 C6a，评分优先消费 transcript 中的原生委派/完成信号；`delegation_trace.json` 仅作为兼容 fallback。失败恢复既可以通过重新委派体现，也可以通过主会话在失败后本地修复获得部分恢复分。
-
-失败归因分为：委派失败、执行失败、整合失败。
 
 ## 文档
 

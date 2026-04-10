@@ -65,6 +65,54 @@ subagent-bench grade \
 | `task_10` | C6b | Output compliance |
 | `task_11` | C6b | Error handling |
 
+## Task Format
+
+Each task is a Markdown file with YAML frontmatter:
+
+```yaml
+---
+id: task_01
+benchmark_target: C6a
+task_type: T1
+dimensions: ["delegation_decision_accuracy"]
+grading_type: automated     # automated | llm_judge | hybrid
+timeout_seconds: 180
+---
+```
+
+Sections: `## Prompt`, `## Expected Behavior`, `## Grading Criteria`, `## Automated Checks`, `## LLM Judge Rubric`.
+
+## Trace Format
+
+Traces are JSON with an `events` array. Key event types:
+
+| Event | Meaning |
+|---|---|
+| `delegate` | Main agent delegates to subagent |
+| `subagent_result` | Subagent returns result |
+| `replan` | Main agent replans |
+| `tool_use` / `tool_result` | Tool call and response |
+| `artifact_written` | Output artifact written |
+| `verification` | Result verification |
+
+## Grading
+
+Three modes, configured per task via `grading_type`:
+
+- **`automated`** — deterministic Python `grade(trace, workspace_path) → dict` embedded in each task's `## Automated Checks` block; scores are weighted-averaged to `[0.0, 1.0]`.
+- **`llm_judge`** — structured prompt (task prompt + transcript + rubric) sent to a judge LLM; returns `{"scores": {...}, "total": float}`. All tasks share three criteria: `split_quality`, `delegation_clarity`, `integration_reliability`.
+- **`hybrid`** — weighted combination of both, configured via `grading_weights` in frontmatter (e.g., `automated: 0.6`, `llm_judge: 0.4`).
+
+Failures are attributed to one of: **Delegation**, **Execution**, or **Integration**.
+
+**Offline vs Live:**
+
+| | Offline (`subagent-bench grade`) | Live (`scripts/benchmark.py`) |
+|---|---|---|
+| Trace source | Pre-recorded JSON in `examples/traces/` | Real-time agent execution |
+| LLM judge | Reads embedded `judge_result` from trace | Calls judge API in real time |
+| Use case | Regression testing | Full benchmark against real agents |
+
 ## Project Structure
 
 ```
