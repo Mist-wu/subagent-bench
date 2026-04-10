@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import platform
+import re
 import stat
 import subprocess
 import time
@@ -730,6 +731,49 @@ def _transcript_has_async_handoff(transcript: List[Dict[str, Any]]) -> bool:
     return False
 
 
+def _expected_child_session_keys(transcript: List[Dict[str, Any]]) -> set[str]:
+    keys: set[str] = set()
+    for entry in transcript:
+        if entry.get("type") != "message":
+            continue
+        message = entry.get("message", {})
+        if message.get("role") != "toolResult":
+            continue
+        if message.get("toolName") != "sessions_spawn":
+            continue
+        details = message.get("details", {})
+        if details.get("status") != "accepted":
+            continue
+        child_key = details.get("childSessionKey")
+        if isinstance(child_key, str) and child_key:
+            keys.add(child_key)
+    return keys
+
+
+def _completed_child_session_keys(transcript: List[Dict[str, Any]]) -> set[str]:
+    keys: set[str] = set()
+    for entry in transcript:
+        if entry.get("type") != "message":
+            continue
+
+        provenance = entry.get("provenance", {})
+        source_key = provenance.get("sourceSessionKey")
+        if isinstance(source_key, str) and source_key:
+            keys.add(source_key)
+
+        message = entry.get("message", {})
+        if message.get("role") != "user":
+            continue
+        for item in message.get("content", []):
+            if item.get("type") != "text":
+                continue
+            text = item.get("text", "")
+            match = re.search(r"session_key:\s*(\S+)", text)
+            if match:
+                keys.add(match.group(1))
+    return keys
+
+
 def _wait_for_transcript_settle(
     agent_id: str,
     session_id: str,
@@ -793,6 +837,10 @@ def _wait_for_transcript_settle(
 
         transcript = latest_transcript
         related_transcripts = latest_related
+        expected_keys = _expected_child_session_keys(transcript)
+        completed_keys = _completed_child_session_keys(transcript)
+        if expected_keys and not expected_keys.issubset(completed_keys):
+            continue
         if time.time() - last_change >= quiet_seconds:
             break
 
@@ -1005,6 +1053,14 @@ def _normalize_native_subagent_worker_prompt(prompt: str) -> str:
     return normalized
 
 
+def _get_live_execution_mode(task: Task) -> str:
+    benchmark_target = str(task.frontmatter.get("benchmark_target", "")).strip()
+    live_mode = str(task.frontmatter.get("live_execution_mode", "")).strip()
+    if not live_mode:
+        live_mode = "native_subagent" if benchmark_target == "C6b" else "direct"
+    return live_mode
+
+
 def _is_session_lock_error(stderr: str) -> bool:
     return "session file locked" in (stderr or "").lower()
 
@@ -1024,6 +1080,7 @@ def execute_openclaw_task(
     logger.info("🤖 Agent [%s] starting task: %s", agent_id, task.task_id)
     logger.info("   Task: %s", task.name)
     logger.info("   Category: %s", task.category)
+    live_mode = _get_live_execution_mode(task)
     live_prompt = _resolve_live_task_prompt(task)
     if verbose:
         logger.info(
@@ -1150,7 +1207,7 @@ def execute_openclaw_task(
 
     transcript, transcript_path = _load_transcript(agent_id, session_id, start_time)
     related_transcripts = _load_related_transcripts(agent_id, start_time, transcript_path)
-    if transcript and _transcript_has_async_handoff(transcript):
+    if transcript and (live_mode == "native_subagent" or _transcript_has_async_handoff(transcript)):
         transcript, transcript_path, related_transcripts = _wait_for_transcript_settle(
             agent_id,
             session_id,

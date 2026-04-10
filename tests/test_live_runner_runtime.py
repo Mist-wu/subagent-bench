@@ -144,3 +144,85 @@ def test_async_settle_waits_for_child_transcript_updates(monkeypatch, tmp_path) 
     assert len(transcript) == 1
     assert len(related) == 1
     assert len(related[0]["entries"]) == 2
+
+
+def test_async_settle_waits_for_parent_completion_event(monkeypatch, tmp_path) -> None:
+    import lib_agent
+
+    main_path = tmp_path / "main.jsonl"
+    child_path = tmp_path / "child.jsonl"
+    main_path.write_text("main", encoding="utf-8")
+    child_path.write_text("child", encoding="utf-8")
+
+    class FakeClock:
+        def __init__(self) -> None:
+            self.now = 1000.0
+
+        def time(self) -> float:
+            return self.now
+
+        def sleep(self, seconds: float) -> None:
+            self.now += seconds
+
+    clock = FakeClock()
+    monkeypatch.setattr(lib_agent.time, "time", clock.time)
+    monkeypatch.setattr(lib_agent.time, "sleep", clock.sleep)
+
+    def main_transcript(include_completion: bool):
+        transcript = [
+            {
+                "type": "message",
+                "message": {
+                    "role": "toolResult",
+                    "toolName": "sessions_spawn",
+                    "details": {
+                        "status": "accepted",
+                        "childSessionKey": "agent:test:subagent:abc",
+                    },
+                },
+            },
+            {
+                "type": "message",
+                "message": {"role": "assistant", "content": []},
+            },
+        ]
+        if include_completion:
+            transcript.append(
+                {
+                    "type": "message",
+                    "message": {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "session_key: agent:test:subagent:abc"}],
+                    },
+                    "provenance": {"sourceSessionKey": "agent:test:subagent:abc"},
+                }
+            )
+        return transcript
+
+    def fake_load_transcript(agent_id: str, session_id: str, started_at: float):
+        include_completion = clock.now >= 1010.0
+        return (main_transcript(include_completion), main_path)
+
+    def fake_load_related(agent_id: str, started_at: float, primary_path):
+        if clock.now < 1004.0:
+            child_path.write_text("child-v1", encoding="utf-8")
+        return [{"path": child_path, "entries": [{"type": "message", "message": {"role": "assistant", "content": []}}], "mtime": child_path.stat().st_mtime}]
+
+    monkeypatch.setattr(lib_agent, "_load_transcript", fake_load_transcript)
+    monkeypatch.setattr(lib_agent, "_load_related_transcripts", fake_load_related)
+
+    transcript, transcript_path, related = _wait_for_transcript_settle(
+        "agent-x",
+        "session-x",
+        999.0,
+        main_path,
+        quiet_seconds=4.0,
+        max_wait_seconds=20.0,
+    )
+
+    assert transcript_path == main_path
+    assert len(related) == 1
+    assert any(
+        entry.get("provenance", {}).get("sourceSessionKey") == "agent:test:subagent:abc"
+        for entry in transcript
+    )
