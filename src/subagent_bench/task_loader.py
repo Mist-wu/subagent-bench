@@ -44,6 +44,7 @@ class TaskLoader:
             grading_criteria=self._extract_checklist(sections.get("Grading Criteria", "")),
             automated_checks=sections.get("Automated Checks"),
             llm_judge_rubric=sections.get("LLM Judge Rubric"),
+            automated_weights=metadata.get("automated_weights"),
             grading_weights=metadata.get("grading_weights"),
             file_path=task_file,
             frontmatter=metadata,

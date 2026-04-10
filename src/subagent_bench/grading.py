@@ -90,7 +90,7 @@ def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResu
     normalized = {key: float(value) for key, value in scores.items()}
     normalized["__category__"] = task.category
     normalized["__dimensions__"] = list(task.dimensions)
-    score = _strip_metadata_from_average(normalized)
+    score = _strip_metadata_from_average(normalized, task.automated_weights)
     return _attach_failure_attribution(_attach_task_metadata(
         GradeResult(
             task_id=task.task_id,
@@ -110,13 +110,32 @@ def _extract_python_code(section: str) -> str:
     return section.strip()
 
 
-def _strip_metadata_from_average(scores: Dict[str, Any]) -> float:
-    numeric_values = [
-        float(value)
+def _strip_metadata_from_average(
+    scores: Dict[str, Any],
+    weights: Dict[str, float] | None = None,
+) -> float:
+    numeric_scores = {
+        key: float(value)
         for key, value in scores.items()
         if not key.startswith("__")
-    ]
-    return sum(numeric_values) / len(numeric_values) if numeric_values else 0.0
+    }
+    if not numeric_scores:
+        return 0.0
+
+    if not weights:
+        return sum(numeric_scores.values()) / len(numeric_scores)
+
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for key, value in numeric_scores.items():
+        weight = float(weights.get(key, 1.0))
+        if weight <= 0:
+            continue
+        total_weight += weight
+        weighted_sum += value * weight
+    if total_weight <= 0:
+        return sum(numeric_scores.values()) / len(numeric_scores)
+    return weighted_sum / total_weight
 
 
 def _attach_task_metadata(result: GradeResult, task: Task) -> GradeResult:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json as jsonlib
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Sequence
 
 
 def delegate_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
@@ -13,6 +13,10 @@ def delegate_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None 
     if trace_bundle:
         native = _merge_event_lists(native, list(trace_bundle.get("delegations", [])), "delegation_id")
     return native
+
+
+def native_delegate_events(trace: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return _native_delegate_events(list(trace))
 
 
 def subagent_results(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
@@ -26,6 +30,10 @@ def subagent_results(trace: Iterable[Dict[str, Any]], workspace_path: str | None
             "delegation_id",
         )
     return native
+
+
+def native_subagent_results(trace: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return _native_subagent_results(list(trace))
 
 
 def concurrent_delegate_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
@@ -54,6 +62,10 @@ def replan_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = 
     return native
 
 
+def native_replan_events(trace: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return _native_replan_events(list(trace))
+
+
 def local_recovery_events(trace: Iterable[Dict[str, Any]], workspace_path: str | None = None) -> List[Dict[str, Any]]:
     trace_list = list(trace)
     native = _native_local_recovery_events(trace_list)
@@ -77,6 +89,10 @@ def verification_events(trace: Iterable[Dict[str, Any]], workspace_path: str | N
     return native
 
 
+def native_verification_events(trace: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return _native_verification_events(list(trace))
+
+
 def load_delegation_trace(workspace_path: str | None) -> Dict[str, Any]:
     if not workspace_path:
         return {}
@@ -96,6 +112,10 @@ def load_delegation_trace(workspace_path: str | None) -> Dict[str, Any]:
 
 
 def delegation_fields_present(event: Dict[str, Any]) -> bool:
+    return delegation_fields_score(event) >= 0.999
+
+
+def delegation_fields_score(event: Dict[str, Any]) -> float:
     aliases = {
         "delegation_id": ["delegation_id", "id", "task", "label"],
         "assignee": ["assignee", "delegate", "runtime", "agent"],
@@ -104,15 +124,17 @@ def delegation_fields_present(event: Dict[str, Any]) -> bool:
         "success_criteria": ["success_criteria", "success", "done_when", "acceptance_criteria"],
         "output_path": ["output_path", "artifact", "destination", "target_file"],
     }
+    present = 0
     for field_aliases in aliases.values():
         value = _first_present(event, field_aliases)
         if value is None:
-            return False
+            continue
         if isinstance(value, str) and not value.strip():
-            return False
+            continue
         if isinstance(value, list) and not value:
-            return False
-    return True
+            continue
+        present += 1
+    return present / len(aliases)
 
 
 def artifact_exists(workspace_path: str, relative_path: str) -> bool:
@@ -120,11 +142,70 @@ def artifact_exists(workspace_path: str, relative_path: str) -> bool:
 
 
 def artifact_contains(workspace_path: str, relative_path: str, needles: List[str]) -> bool:
+    return artifact_contains_score(workspace_path, relative_path, needles) >= 0.999
+
+
+def artifact_contains_score(
+    workspace_path: str,
+    relative_path: str,
+    needles: Sequence[str | Sequence[str]],
+) -> float:
     artifact = Path(workspace_path) / relative_path
     if not artifact.exists():
-        return False
-    content = artifact.read_text(encoding="utf-8").lower()
-    return all(needle.lower() in content for needle in needles)
+        return 0.0
+    content = artifact.read_text(encoding="utf-8")
+    if not needles:
+        return 1.0
+
+    matched = 0
+    for needle in needles:
+        if _text_matches_group(content, needle):
+            matched += 1
+    return matched / len(needles)
+
+
+def artifact_location_score(
+    workspace_path: str,
+    relative_path: str,
+    expected_locations: Sequence[str | tuple[str, int]],
+    *,
+    line_tolerance: int = 2,
+) -> float:
+    artifact = Path(workspace_path) / relative_path
+    if not artifact.exists():
+        return 0.0
+    content = artifact.read_text(encoding="utf-8")
+    actual_locations = _extract_locations(content)
+    if not expected_locations:
+        return 1.0
+
+    matched = 0
+    for expected in expected_locations:
+        expected_path, expected_line = _coerce_location(expected)
+        if not expected_path:
+            continue
+        if any(
+            _normalized_path(actual_path) == _normalized_path(expected_path)
+            and (expected_line is None or actual_line is None or abs(actual_line - expected_line) <= line_tolerance)
+            for actual_path, actual_line in actual_locations
+        ):
+            matched += 1
+    return matched / len(expected_locations)
+
+
+def native_event_coverage_score(native_count: int, merged_count: int, *, expected_min: int = 1) -> float:
+    if native_count >= expected_min:
+        return 1.0
+    if merged_count >= expected_min:
+        return 0.5
+    return 0.0
+
+
+def phrase_group_score(text: str, expected_groups: Sequence[str | Sequence[str]]) -> float:
+    if not expected_groups:
+        return 1.0
+    matched = sum(1 for group in expected_groups if _text_matches_group(text, group))
+    return matched / len(expected_groups)
 
 
 def transcript_has_tool_call(
@@ -194,6 +275,39 @@ def _first_present(event: Dict[str, Any], keys: List[str]) -> Any:
         if value is not None:
             return value
     return None
+
+
+def _text_matches_group(text: str, expected: str | Sequence[str]) -> bool:
+    normalized_text = _normalize_text(text)
+    if isinstance(expected, str):
+        return _normalize_text(expected) in normalized_text
+    return any(_normalize_text(option) in normalized_text for option in expected if str(option).strip())
+
+
+def _normalize_text(value: str) -> str:
+    normalized = value.lower()
+    normalized = normalized.replace("_", " ").replace("-", " ")
+    normalized = re.sub(r"[`*#>\[\]\(\)\{\}:;,.!?\"']", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _extract_locations(text: str) -> List[tuple[str, int | None]]:
+    matches = re.findall(r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+):(\d+)", text)
+    return [(path, int(line)) for path, line in matches]
+
+
+def _coerce_location(location: str | tuple[str, int]) -> tuple[str, int | None]:
+    if isinstance(location, tuple):
+        return str(location[0]), int(location[1])
+    match = re.match(r"^(.*?):(\d+)$", str(location).strip())
+    if not match:
+        return str(location).strip(), None
+    return match.group(1), int(match.group(2))
+
+
+def _normalized_path(value: str) -> str:
+    return value.strip().replace("\\", "/").lower()
 
 
 def _extract_output_path(instruction: str) -> str:

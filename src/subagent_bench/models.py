@@ -21,6 +21,7 @@ class Task:
     grading_criteria: List[str]
     automated_checks: Optional[str] = None
     llm_judge_rubric: Optional[str] = None
+    automated_weights: Optional[Dict[str, float]] = None
     grading_weights: Optional[Dict[str, float]] = None
     file_path: Optional[Path] = None
     frontmatter: Dict[str, Any] = field(default_factory=dict)
