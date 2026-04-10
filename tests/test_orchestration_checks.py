@@ -1,7 +1,11 @@
 from subagent_bench.orchestration_checks import (
+    artifact_contains_score,
+    artifact_location_score,
     concurrent_delegate_events,
     delegate_events,
+    delegation_fields_score,
     local_recovery_events,
+    native_event_coverage_score,
     replan_events,
     subagent_results,
     verification_events,
@@ -264,3 +268,59 @@ def test_subagent_results_parse_internal_runtime_text_blocks() -> None:
     assert results[0]["delegation_id"] == "report-task"
     assert results[0]["status"] == "success"
     assert "worker finished cleanly" in results[0]["summary"]
+
+
+def test_delegation_fields_score_is_fractional() -> None:
+    score = delegation_fields_score(
+        {
+            "delegation_id": "schema-scan",
+            "assignee": "subagent",
+            "instruction": "Scan the schema",
+            "inputs": ["schema.sql"],
+            "success_criteria": ["Write findings"],
+        }
+    )
+
+    assert score == 5 / 6
+
+
+def test_artifact_contains_score_accepts_synonyms_and_normalized_text(tmp_path) -> None:
+    artifact = tmp_path / "report.md"
+    artifact.write_text(
+        "Backend migration scope completed in one focused pass.\n",
+        encoding="utf-8",
+    )
+
+    score = artifact_contains_score(
+        str(tmp_path),
+        "report.md",
+        [
+            ["backend migration", "migration scope"],
+            ["single search pass", "one focused pass"],
+        ],
+    )
+
+    assert score == 1.0
+
+
+def test_artifact_location_score_allows_small_line_drift(tmp_path) -> None:
+    artifact = tmp_path / "report.md"
+    artifact.write_text(
+        "Found usage in src/api/users.ts:16 and src/api/orders.ts:20.\n",
+        encoding="utf-8",
+    )
+
+    score = artifact_location_score(
+        str(tmp_path),
+        "report.md",
+        ["src/api/users.ts:14", "src/api/orders.ts:22"],
+        line_tolerance=2,
+    )
+
+    assert score == 1.0
+
+
+def test_native_event_coverage_score_penalizes_fallback_only() -> None:
+    assert native_event_coverage_score(1, 1) == 1.0
+    assert native_event_coverage_score(0, 1) == 0.5
+    assert native_event_coverage_score(0, 0) == 0.0

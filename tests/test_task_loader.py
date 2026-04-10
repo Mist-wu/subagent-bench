@@ -14,3 +14,5 @@ def test_loads_all_tasks() -> None:
     assert tasks[3].task_type == "T5"
     assert tasks[8].benchmark_target == "C6b"
     assert tasks[10].grading_type == "automated"
+    assert tasks[0].automated_weights is not None
+    assert tasks[0].automated_weights["delegates_when_needed"] == 0.3
