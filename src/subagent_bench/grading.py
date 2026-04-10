@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Dict
 
+from subagent_bench.grading_utils import extract_python_code, normalize_numeric_scores, weighted_average
 from subagent_bench.models import GradeResult, Task
 from subagent_bench.trace import load_trace
 
@@ -66,7 +66,7 @@ def grade_task(task: Task, trace_path: Path, workspace_path: Path) -> GradeResul
 
 
 def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResult:
-    grading_code = _extract_python_code(task.automated_checks or "")
+    grading_code = extract_python_code(task.automated_checks or "")
     if not grading_code:
         return GradeResult(
             task_id=task.task_id,
@@ -87,10 +87,10 @@ def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResu
     if not isinstance(scores, dict):
         raise ValueError(f"Task {task.task_id} returned a non-dict score payload")
 
-    normalized = {key: float(value) for key, value in scores.items()}
+    normalized = normalize_numeric_scores(scores)
     normalized["__category__"] = task.category
     normalized["__dimensions__"] = list(task.dimensions)
-    score = _strip_metadata_from_average(normalized, task.automated_weights)
+    score = weighted_average(normalized, task.automated_weights)
     return _attach_failure_attribution(_attach_task_metadata(
         GradeResult(
             task_id=task.task_id,
@@ -100,42 +100,7 @@ def _grade_automated(task: Task, events: Any, workspace_path: Path) -> GradeResu
             breakdown=normalized,
         ),
         task,
-    ), task)
-
-
-def _extract_python_code(section: str) -> str:
-    match = re.search(r"```python\s*(.*?)```", section, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return section.strip()
-
-
-def _strip_metadata_from_average(
-    scores: Dict[str, Any],
-    weights: Dict[str, float] | None = None,
-) -> float:
-    numeric_scores = {
-        key: float(value)
-        for key, value in scores.items()
-        if not key.startswith("__")
-    }
-    if not numeric_scores:
-        return 0.0
-
-    if not weights:
-        return sum(numeric_scores.values()) / len(numeric_scores)
-
-    total_weight = 0.0
-    weighted_sum = 0.0
-    for key, value in numeric_scores.items():
-        weight = float(weights.get(key, 1.0))
-        if weight <= 0:
-            continue
-        total_weight += weight
-        weighted_sum += value * weight
-    if total_weight <= 0:
-        return sum(numeric_scores.values()) / len(numeric_scores)
-    return weighted_sum / total_weight
+        ), task)
 
 
 def _attach_task_metadata(result: GradeResult, task: Task) -> GradeResult:

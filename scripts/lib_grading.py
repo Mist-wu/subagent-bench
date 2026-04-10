@@ -12,8 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from _paths import ensure_src_on_path
 from lib_agent import call_judge_api, ensure_agent_exists, run_openclaw_prompt, slugify_model
 from lib_tasks import Task
+
+ensure_src_on_path()
+
+from subagent_bench.grading_utils import extract_python_code, normalize_numeric_scores, weighted_average
 
 
 logger = logging.getLogger(__name__)
@@ -98,7 +103,7 @@ def grade_task(
 
 
 def _grade_automated(task: Task, execution_result: Dict[str, Any], verbose: bool = False) -> GradeResult:
-    grading_code = _extract_grading_code(task)
+    grading_code = extract_python_code(task.automated_checks or "")
     if not grading_code:
         return GradeResult(
             task_id=task.task_id,
@@ -132,13 +137,13 @@ def _grade_automated(task: Task, execution_result: Dict[str, Any], verbose: bool
     if verbose:
         logger.info("   [VERBOSE] Automated grading scores: %s", scores)
 
-    total = _average_scores(scores, task.automated_weights)
+    total = weighted_average(scores, task.automated_weights)
     return GradeResult(
         task_id=task.task_id,
         score=total,
         max_score=1.0,
         grading_type="automated",
-        breakdown=_normalize_score_dict(scores),
+        breakdown=normalize_numeric_scores(scores),
         notes="",
     )
 
@@ -242,22 +247,21 @@ def _grade_llm_judge(
         score=float(total) if total is not None else 0.0,
         max_score=1.0,
         grading_type="llm_judge",
-        breakdown=_normalize_score_dict(breakdown),
+        breakdown=normalize_numeric_scores(breakdown),
         notes=str(notes) if notes is not None else "",
     )
 
 
 def _combine_grades(task: Task, auto_result: GradeResult, llm_result: GradeResult) -> GradeResult:
     weights = task.grading_weights or {"automated": 0.5, "llm_judge": 0.5}
-    auto_weight = float(weights.get("automated", 0.5))
-    llm_weight = float(weights.get("llm_judge", 0.5))
-    total_weight = auto_weight + llm_weight
-    if total_weight <= 0:
-        auto_weight = llm_weight = 0.5
-        total_weight = 1.0
-    combined_score = (
-        auto_result.score * auto_weight + llm_result.score * llm_weight
-    ) / total_weight
+    combined_score = weighted_average(
+        {
+            "automated": auto_result.score,
+            "llm_judge": llm_result.score,
+        },
+        weights,
+        skip_prefixes=(),
+    )
     breakdown = {
         **{f"automated.{k}": v for k, v in auto_result.breakdown.items()},
         **{f"llm_judge.{k}": v for k, v in llm_result.breakdown.items()},
@@ -271,49 +275,6 @@ def _combine_grades(task: Task, auto_result: GradeResult, llm_result: GradeResul
         breakdown=breakdown,
         notes=notes,
     )
-
-
-def _extract_grading_code(task: Task) -> str:
-    if not task.automated_checks:
-        return ""
-    match = re.search(r"```python\s*(.*?)\s*```", task.automated_checks, re.DOTALL)
-    if not match:
-        return ""
-    return match.group(1)
-
-
-def _average_scores(scores: Dict[str, Any], weights: Optional[Dict[str, float]] = None) -> float:
-    numeric_scores = {
-        str(key): float(value)
-        for key, value in scores.items()
-        if isinstance(value, (int, float))
-    }
-    if not numeric_scores:
-        return 0.0
-    if not weights:
-        return sum(numeric_scores.values()) / len(numeric_scores)
-
-    total_weight = 0.0
-    weighted_sum = 0.0
-    for key, value in numeric_scores.items():
-        weight = float(weights.get(key, 1.0))
-        if weight <= 0:
-            continue
-        total_weight += weight
-        weighted_sum += value * weight
-    if total_weight <= 0:
-        return sum(numeric_scores.values()) / len(numeric_scores)
-    return weighted_sum / total_weight
-
-
-def _normalize_score_dict(scores: Dict[str, Any]) -> Dict[str, float]:
-    normalized: Dict[str, float] = {}
-    for key, value in scores.items():
-        try:
-            normalized[str(key)] = float(value)
-        except (TypeError, ValueError):
-            continue
-    return normalized
 
 
 def _format_grading_criteria(task: Task) -> str:
