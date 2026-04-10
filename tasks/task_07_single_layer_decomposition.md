@@ -29,6 +29,11 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  decomposition_count_in_range: 0.25
+  distinct_decomposition_scopes: 0.25
+  delegation_spec_completeness: 0.25
+  decomposition_integration: 0.25
 ---
 
 ## Prompt
@@ -53,19 +58,33 @@ The main agent should decompose the task into a small set of complete, non-redun
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import delegate_events, delegation_fields_present
+    from subagent_bench.orchestration_checks import (
+        artifact_contains_score,
+        delegate_events,
+        delegation_fields_score,
+    )
 
     delegations = delegate_events(trace, workspace_path)
-    right_count = 1.0 if 2 <= len(delegations) <= 4 else 0.0
+    right_count = 1.0 if 2 <= len(delegations) <= 4 else 0.5 if len(delegations) in {1, 5} else 0.0
     unique_outputs = len({event.get("output_path") for event in delegations})
     distinct_scopes = 1.0 if delegations and unique_outputs == len(delegations) else 0.0
-    complete_specs = 1.0 if delegations and all(delegation_fields_present(event) for event in delegations) else 0.0
+    complete_specs = (
+        sum(delegation_fields_score(event) for event in delegations) / len(delegations)
+        if delegations else 0.0
+    )
 
     artifact = Path(workspace_path) / "reports/launch_plan.md"
     integrated = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        integrated = 1.0 if "frontend readiness" in content and "backend readiness" in content and "docs readiness" in content else 0.0
+        integrated = artifact_contains_score(
+            workspace_path,
+            "reports/launch_plan.md",
+            [
+                ["frontend readiness", "frontend"],
+                ["backend readiness", "backend"],
+                ["docs readiness", "documentation readiness", "docs"],
+            ],
+        )
 
     return {
         "decomposition_count_in_range": right_count,

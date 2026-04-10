@@ -78,6 +78,11 @@ workspace_files:
 grading_weights:
   automated: 0.7
   llm_judge: 0.3
+automated_weights:
+  tool_use_correctness: 0.2
+  completion_rate: 0.2
+  result_fidelity: 0.4
+  intent_understanding: 0.2
 ---
 
 ## Prompt
@@ -100,7 +105,7 @@ The delegated worker should understand the goal, use search tooling correctly, f
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import transcript_has_tool_call
+    from subagent_bench.orchestration_checks import artifact_location_score, transcript_has_tool_call
 
     used_search_tool = 1.0 if (
         transcript_has_tool_call(trace, "exec", "rawQuery")
@@ -111,17 +116,22 @@ def grade(trace: list, workspace_path: str) -> dict:
 
     fidelity = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        fidelity = 1.0 if (
-            ("src/api/users.ts:16" in content and "src/api/orders.ts:20" in content and "src/api/orders.ts:44" in content)
-            or ("src/api/users.ts:14" in content and "src/api/orders.ts:22" in content and "src/api/orders.ts:41" in content)
-        ) else 0.0
+        fidelity = artifact_location_score(
+            workspace_path,
+            "reports/raw_query_report.md",
+            [
+                "src/api/users.ts:14",
+                "src/api/orders.ts:22",
+                "src/api/orders.ts:41",
+            ],
+            line_tolerance=3,
+        )
 
     return {
         "tool_use_correctness": used_search_tool,
         "completion_rate": artifact_exists,
         "result_fidelity": fidelity,
-        "intent_understanding": 1.0 if artifact_exists and fidelity else 0.0,
+        "intent_understanding": (artifact_exists + fidelity) / 2,
     }
 ```
 

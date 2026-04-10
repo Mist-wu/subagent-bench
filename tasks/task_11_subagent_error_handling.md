@@ -8,6 +8,10 @@ dimensions: ["timeout_error_handling", "completion_rate", "result_fidelity"]
 grading_type: automated
 timeout_seconds: 180
 live_execution_mode: native_subagent
+automated_weights:
+  timeout_error_handling: 0.4
+  completion_rate: 0.2
+  result_fidelity: 0.4
 workspace_files:
   - path: "inputs/fallback_source.txt"
     content: |
@@ -36,7 +40,11 @@ The delegated worker should detect the failure, switch to the fallback input, an
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import transcript_has_tool_call, transcript_has_tool_result_error
+    from subagent_bench.orchestration_checks import (
+        artifact_contains_score,
+        transcript_has_tool_call,
+        transcript_has_tool_result_error,
+    )
 
     saw_failure = 1.0 if (
         transcript_has_tool_result_error(trace, "read", "primary_source.txt")
@@ -51,11 +59,17 @@ def grade(trace: list, workspace_path: str) -> dict:
     completion = 1.0 if artifact.exists() else 0.0
     fidelity = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        fidelity = 1.0 if "fallback source" in content and "recovered summary" in content else 0.0
+        fidelity = artifact_contains_score(
+            workspace_path,
+            "reports/recovered_summary.md",
+            [
+                ["fallback source"],
+                ["recovered summary", "incident review", "canonical notes"],
+            ],
+        )
 
     return {
-        "timeout_error_handling": 1.0 if saw_failure and fallback else 0.0,
+        "timeout_error_handling": (saw_failure + fallback) / 2,
         "completion_rate": completion,
         "result_fidelity": fidelity,
     }

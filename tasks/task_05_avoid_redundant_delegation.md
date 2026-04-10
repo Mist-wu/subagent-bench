@@ -25,6 +25,11 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  no_overlapping_delegations: 0.35
+  minimal_delegation_count: 0.25
+  artifact_exists: 0.15
+  consistent_scope: 0.25
 ---
 
 ## Prompt
@@ -49,13 +54,13 @@ The main agent should avoid duplicate delegation over the same scope. One focuse
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import delegate_events
+    from subagent_bench.orchestration_checks import artifact_contains_score, delegate_events
 
     delegations = delegate_events(trace, workspace_path)
     scopes = [tuple(event.get("inputs", [])) for event in delegations]
     unique_scopes = len(set(scopes))
 
-    no_overlap = 1.0 if len(delegations) == unique_scopes else 0.0
+    no_overlap = 1.0 if len(delegations) <= 1 else (unique_scopes / len(delegations))
     minimal_count = 1.0 if len(delegations) <= 1 else 0.0
 
     artifact = Path(workspace_path) / "reports/backend_migration_findings.md"
@@ -63,8 +68,14 @@ def grade(trace: list, workspace_path: str) -> dict:
 
     consistent_scope = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        consistent_scope = 1.0 if "backend migration" in content and "single search pass" in content else 0.0
+        consistent_scope = artifact_contains_score(
+            workspace_path,
+            "reports/backend_migration_findings.md",
+            [
+                ["backend migration", "backend migration scope", "invoice persistence backend"],
+                ["single search pass", "one search pass", "single scan", "one focused pass"],
+            ],
+        )
 
     return {
         "no_overlapping_delegations": no_overlap,

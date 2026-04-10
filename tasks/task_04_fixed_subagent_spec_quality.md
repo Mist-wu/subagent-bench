@@ -27,6 +27,11 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  single_delegation: 0.25
+  complete_spec: 0.35
+  output_format_specified: 0.2
+  artifact_produced: 0.2
 ---
 
 ## Prompt
@@ -51,16 +56,30 @@ The main agent should create one delegation with explicit inputs, constraints, s
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import delegate_events, delegation_fields_present
+    from subagent_bench.orchestration_checks import (
+        delegate_events,
+        delegation_fields_score,
+        native_delegate_events,
+        native_event_coverage_score,
+        phrase_group_score,
+    )
 
     delegations = delegate_events(trace, workspace_path)
-    exactly_one = 1.0 if len(delegations) == 1 else 0.0
-    spec_complete = 1.0 if delegations and delegation_fields_present(delegations[0]) else 0.0
+    exactly_one = min(
+        max(0.0, 1.0 - (0.5 * abs(len(delegations) - 1))),
+        native_event_coverage_score(len(native_delegate_events(trace)), len(delegations)),
+    )
+    spec_complete = delegation_fields_score(delegations[0]) if delegations else 0.0
 
     output_format = 0.0
     if delegations:
-        instruction = delegations[0].get("instruction", "").lower()
-        output_format = 1.0 if "markdown" in instruction and "headings" in instruction else 0.0
+        output_format = phrase_group_score(
+            delegations[0].get("instruction", ""),
+            [
+                ["markdown"],
+                ["heading", "headings"],
+            ],
+        )
 
     artifact = Path(workspace_path) / "reports/extracted_api_summary.md"
     produced = 1.0 if artifact.exists() else 0.0

@@ -31,11 +31,16 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  failure_detected: 0.25
+  replan_or_retry: 0.3
+  later_success: 0.2
+  final_output_with_recovery_note: 0.25
 ---
 
 ## Prompt
 
-Audit a risky migration plan. The first delegated search should be treated as failed because it does not include enough context. The main agent should notice the failure, replan, send a corrected delegation that includes `docs/api_contract.md` and `docs/dependency_notes.md`, and still finish `reports/risk_register.md`.
+Audit a risky migration plan. If an initial delegated search fails because it does not include enough context, the main agent should notice the failure, replan, send a corrected delegation that includes `docs/api_contract.md` and `docs/dependency_notes.md`, and still finish `reports/risk_register.md`.
 
 Prefer leaving native runtime evidence for the failed delegation, recovery, and later success in the transcript. If the runtime cannot surface those events cleanly, write `delegation_trace.json` in the workspace root as a compatibility fallback.
 
@@ -55,9 +60,11 @@ The main agent should not stop at the first subagent failure. It should either a
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from subagent_bench.orchestration_checks import (
-        artifact_contains,
+        artifact_contains_score,
         artifact_exists,
         local_recovery_events,
+        native_event_coverage_score,
+        native_replan_events,
         replan_events,
         subagent_results,
     )
@@ -65,13 +72,24 @@ def grade(trace: list, workspace_path: str) -> dict:
     results = subagent_results(trace, workspace_path)
     local_recoveries = local_recovery_events(trace, workspace_path)
     saw_failure = 1.0 if any(event.get("status") == "failed" for event in results) else 0.0
-    replanned = 1.0 if replan_events(trace, workspace_path) else 0.0
-    recovered = 1.0 if any(event.get("status") == "success" for event in results[1:]) else 0.5 if local_recoveries else 0.0
-    risk_register = 1.0 if artifact_exists(workspace_path, "reports/risk_register.md") and artifact_contains(
-        workspace_path,
-        "reports/risk_register.md",
-        ["recovered after retry", "missing api contract", "mitigation"],
-    ) else 0.0
+    replans = replan_events(trace, workspace_path)
+    replanned = max(
+        native_event_coverage_score(len(native_replan_events(trace)), len(replans)),
+        0.5 if local_recoveries else 0.0,
+    )
+    recovered = 1.0 if any(event.get("status") == "success" for event in results[1:]) else 0.6 if local_recoveries else 0.0
+    risk_register = min(
+        1.0 if artifact_exists(workspace_path, "reports/risk_register.md") else 0.0,
+        artifact_contains_score(
+            workspace_path,
+            "reports/risk_register.md",
+            [
+                ["recovered after retry", "recovered after rerun", "recovered via fallback", "retry succeeded"],
+                ["missing api contract", "api contract was missing", "contract mismatch"],
+                ["mitigation", "mitigate", "mitigations"],
+            ],
+        ),
+    )
 
     return {
         "failure_detected": saw_failure,

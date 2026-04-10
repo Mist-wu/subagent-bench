@@ -30,6 +30,12 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  parallel_delegations: 0.25
+  concurrency_overlap: 0.2
+  non_overlapping_outputs: 0.2
+  waits_for_both_results: 0.2
+  merged_brief: 0.15
 ---
 
 ## Prompt
@@ -54,24 +60,48 @@ The main agent should create two non-overlapping delegations, wait for both resu
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import concurrent_delegate_events, delegate_events, subagent_results
+    from subagent_bench.orchestration_checks import (
+        artifact_contains_score,
+        concurrent_delegate_events,
+        delegate_events,
+        native_delegate_events,
+        native_event_coverage_score,
+        native_subagent_results,
+        subagent_results,
+    )
 
     delegations = delegate_events(trace, workspace_path)
     concurrent = concurrent_delegate_events(trace, workspace_path)
     results = subagent_results(trace, workspace_path)
+    native_delegations = native_delegate_events(trace)
+    native_results = native_subagent_results(trace)
 
-    has_two = 1.0 if len(delegations) == 2 else 0.0
-    overlap = 1.0 if len(concurrent) >= 2 else 0.0
-    distinct_outputs = 1.0 if len({event.get("output_path") for event in delegations}) == 2 else 0.0
+    has_two = min(
+        max(0.0, 1.0 - (0.5 * abs(len(delegations) - 2))),
+        native_event_coverage_score(len(native_delegations), len(delegations), expected_min=2),
+    )
+    overlap = min(1.0, len(concurrent) / 2) if delegations else 0.0
+    unique_outputs = {event.get("output_path") for event in delegations if event.get("output_path")}
+    distinct_outputs = (len(unique_outputs) / len(delegations)) if delegations else 0.0
 
     result_ids = {event.get("delegation_id") for event in results if event.get("status") == "success"}
-    waited = 1.0 if len(result_ids) == 2 else 0.0
+    delegation_ids = {event.get("delegation_id") for event in delegations}
+    waited = min(
+        len(result_ids & delegation_ids) / 2,
+        native_event_coverage_score(len(native_results), len(results), expected_min=2),
+    )
 
     launch_brief = Path(workspace_path) / "launch_brief.md"
     merged = 0.0
     if launch_brief.exists():
-        content = launch_brief.read_text(encoding="utf-8").lower()
-        merged = 1.0 if "frontend" in content and "backend" in content else 0.0
+        merged = artifact_contains_score(
+            workspace_path,
+            "launch_brief.md",
+            [
+                ["frontend", "frontend findings", "frontend risks"],
+                ["backend", "backend findings", "backend risks"],
+            ],
+        )
 
     return {
         "parallel_delegations": has_two,

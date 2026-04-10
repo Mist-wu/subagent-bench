@@ -30,6 +30,11 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  conflicting_results_detected: 0.25
+  verification_recorded: 0.3
+  decision_after_verification: 0.2
+  source_of_truth_cited: 0.25
 ---
 
 ## Prompt
@@ -54,25 +59,38 @@ The main agent should detect the contradiction, run a verification step, and bas
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import subagent_results, verification_events
+    from subagent_bench.orchestration_checks import (
+        artifact_contains_score,
+        native_event_coverage_score,
+        native_verification_events,
+        subagent_results,
+        verification_events,
+    )
 
     results = subagent_results(trace, workspace_path)
     contradictory = 0.0
     if len(results) >= 2:
         summaries = [
             (event.get("summary") or event.get("conclusion") or "").lower()
-            for event in results[:2]
+            for event in results
         ]
-        contradictory = 1.0 if "safe" in summaries[0] and "unsafe" in summaries[1] else 0.0
+        contradictory = 1.0 if any("safe" in summary for summary in summaries) and any("unsafe" in summary for summary in summaries) else 0.0
 
-    verification = 1.0 if verification_events(trace, workspace_path) else 0.0
+    verifications = verification_events(trace, workspace_path)
+    verification = native_event_coverage_score(len(native_verification_events(trace)), len(verifications))
     ordered = verification
 
     artifact = Path(workspace_path) / "reports/final_decision.md"
     cited_source = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        cited_source = 1.0 if "source of truth" in content and "rollout-policy.md" in content else 0.0
+        cited_source = artifact_contains_score(
+            workspace_path,
+            "reports/final_decision.md",
+            [
+                ["source of truth", "policy source", "verified against policy"],
+                ["rollout-policy.md", "rollout policy"],
+            ],
+        )
 
     return {
         "conflicting_results_detected": contradictory,

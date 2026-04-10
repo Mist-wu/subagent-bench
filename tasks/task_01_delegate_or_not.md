@@ -48,6 +48,12 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  delegates_when_needed: 0.3
+  avoids_over_delegation: 0.2
+  delegation_spec_completeness: 0.25
+  delegated_artifact_exists: 0.1
+  integration_quality: 0.15
 ---
 
 ## Prompt
@@ -101,28 +107,40 @@ The main agent should create exactly one delegation for the expensive audit, pro
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from subagent_bench.orchestration_checks import (
-        artifact_contains,
+        artifact_contains_score,
         artifact_exists,
         delegate_events,
-        delegation_fields_present,
+        delegation_fields_score,
+        native_delegate_events,
+        native_event_coverage_score,
+        native_subagent_results,
+        subagent_results,
     )
 
     delegations = delegate_events(trace, workspace_path)
-    only_one = 1.0 if len(delegations) == 1 else 0.0
-    complete_spec = 1.0 if delegations and delegation_fields_present(delegations[0]) else 0.0
-    delegated_artifact = 1.0 if artifact_exists(workspace_path, "reports/dependency_audit.md") else 0.0
-    integrated = 1.0 if (
-        artifact_contains(
-            workspace_path,
-            "answer.md",
-            ["dependency audit", "reports/dependency_audit.md", "release notes"],
-        )
-        or artifact_contains(
-            workspace_path,
-            "answer.md",
-            ["dependency audit", "reports/dependency_audit.md", "rename handled directly"],
-        )
-    ) else 0.0
+    native_delegations = native_delegate_events(trace)
+    results = subagent_results(trace, workspace_path)
+    native_results = native_subagent_results(trace)
+
+    only_one = max(0.0, 1.0 - (0.5 * abs(len(delegations) - 1)))
+    complete_spec = delegation_fields_score(delegations[0]) if delegations else 0.0
+    process_evidence = min(
+        native_event_coverage_score(len(native_delegations), len(delegations)),
+        native_event_coverage_score(len(native_results), len(results)),
+    )
+    delegated_artifact = min(
+        1.0 if artifact_exists(workspace_path, "reports/dependency_audit.md") else 0.0,
+        process_evidence,
+    )
+    integrated = artifact_contains_score(
+        workspace_path,
+        "answer.md",
+        [
+            ["dependency audit", "dependency review", "audit findings"],
+            ["reports/dependency_audit.md", "dependency_audit.md"],
+            ["release notes", "rename handled directly"],
+        ],
+    )
 
     return {
         "delegates_when_needed": only_one,

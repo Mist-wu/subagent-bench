@@ -30,6 +30,11 @@ workspace_files:
 grading_weights:
   automated: 0.6
   llm_judge: 0.4
+automated_weights:
+  expected_dependency_delegations: 0.2
+  dependency_correctness: 0.35
+  downstream_consumes_upstream_output: 0.25
+  dependency_aware_final_plan: 0.2
 ---
 
 ## Prompt
@@ -54,27 +59,36 @@ The main agent should model the dependency correctly, delegate the schema scan f
 ```python
 def grade(trace: list, workspace_path: str) -> dict:
     from pathlib import Path
-    from subagent_bench.orchestration_checks import delegate_events
+    from subagent_bench.orchestration_checks import artifact_contains_score, delegate_events, phrase_group_score
 
-    delegate_indices = list(enumerate(delegate_events(trace, workspace_path)))
+    delegations = delegate_events(trace, workspace_path)
     ordered = 0.0
     dependency_link = 0.0
 
-    if len(delegate_indices) == 2:
-        first = delegate_indices[0][1]
-        second = delegate_indices[1][1]
-        ordered = 1.0 if first.get("delegation_id") == "schema-scan" and second.get("delegation_id") == "remediation-plan" else 0.0
+    if len(delegations) == 2:
+        first = delegations[0]
+        second = delegations[1]
+        first_signature = " ".join(str(first.get(key, "")) for key in ["delegation_id", "instruction", "output_path"])
+        second_signature = " ".join(str(second.get(key, "")) for key in ["delegation_id", "instruction", "output_path"])
+        first_is_schema = phrase_group_score(first_signature, [["schema"], ["scan", "analysis", "audit"]])
+        second_is_remediation = phrase_group_score(second_signature, [["remediation", "fix"], ["plan"]])
+        ordered = min(first_is_schema, second_is_remediation)
         second_inputs = second.get("inputs", [])
-        dependency_link = 1.0 if "reports/schema_scan.md" in second_inputs else 0.0
+        dependency_link = 1.0 if "reports/schema_scan.md" in second_inputs else 0.5 if "schema" in str(second.get("instruction", "")).lower() else 0.0
 
     artifact = Path(workspace_path) / "reports/dependency_plan.md"
     final_plan = 0.0
     if artifact.exists():
-        content = artifact.read_text(encoding="utf-8").lower()
-        final_plan = 1.0 if "schema before remediation" in content else 0.0
+        final_plan = artifact_contains_score(
+            workspace_path,
+            "reports/dependency_plan.md",
+            [
+                ["schema before remediation", "schema-first remediation", "schema analysis before remediation"],
+            ],
+        )
 
     return {
-        "expected_dependency_delegations": 1.0 if len(delegate_indices) == 2 else 0.0,
+        "expected_dependency_delegations": 1.0 if len(delegations) == 2 else 0.5 if len(delegations) == 1 else 0.0,
         "dependency_correctness": ordered,
         "downstream_consumes_upstream_output": dependency_link,
         "dependency_aware_final_plan": final_plan,

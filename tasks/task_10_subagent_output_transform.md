@@ -19,6 +19,11 @@ workspace_files:
 grading_weights:
   automated: 0.7
   llm_judge: 0.3
+automated_weights:
+  completion_rate: 0.2
+  output_format_compliance: 0.3
+  result_fidelity: 0.3
+  intent_understanding: 0.2
 ---
 
 ## Prompt
@@ -73,14 +78,17 @@ def grade(trace: list, workspace_path: str) -> dict:
 
     departments = payload.get("departments", {})
     count = sum(len(items) for items in departments.values()) if isinstance(departments, dict) else 0
-    fidelity = 1.0 if count == 4 else 0.0
-    output_format = 1.0 if isinstance(departments, dict) and "engineering" in departments and "sales" in departments else 0.0
+    fidelity = min(count / 4, 1.0)
+    output_format = 0.0
+    if isinstance(departments, dict):
+        required_departments = {"engineering", "sales"}
+        output_format = len(required_departments & set(departments)) / len(required_departments)
 
     return {
         "completion_rate": 1.0,
         "output_format_compliance": output_format,
         "result_fidelity": fidelity,
-        "intent_understanding": 1.0 if output_format and fidelity else 0.0,
+        "intent_understanding": (output_format + fidelity) / 2,
     }
 ```
 
